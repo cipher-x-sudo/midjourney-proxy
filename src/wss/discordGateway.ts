@@ -103,44 +103,33 @@ export class DiscordGateway {
 
       this.ws = new WebSocket(gatewayUrl, { headers });
 
-      // Initialize zlib decompressor for zlib-stream (must be fresh for each connection)
-      this.decompressor = zlib.createInflateRaw({
-        chunkSize: 1024 * 16, // 16KB chunks
-        flush: zlib.constants.Z_SYNC_FLUSH,
-      });
+      // Reset buffer for new connection
       this.inflateBuffer = Buffer.alloc(0);
-
-      this.decompressor.on('data', (chunk: Buffer) => {
-        this.inflateBuffer = Buffer.concat([this.inflateBuffer, chunk]);
-        // Try to parse complete JSON messages
-        this.processInflateBuffer();
-      });
-
-      this.decompressor.on('error', (error: Error) => {
-        console.error(`[wss-${this.account.getDisplay()}] Decompressor error:`, error);
-        // Reset decompressor on error
-        if (this.decompressor) {
-          try {
-            this.decompressor.removeAllListeners();
-            this.decompressor.end();
-          } catch (e) {
-            // Ignore cleanup errors
-          }
-          this.decompressor = null;
-        }
-        // Try to recreate decompressor
-        this.decompressor = zlib.createInflateRaw({
-          chunkSize: 1024 * 16,
-          flush: zlib.constants.Z_SYNC_FLUSH,
-        });
-        this.inflateBuffer = Buffer.alloc(0);
-        this.decompressor.on('data', (chunk: Buffer) => {
-          this.inflateBuffer = Buffer.concat([this.inflateBuffer, chunk]);
-          this.processInflateBuffer();
-        });
-      });
+      this.decompressor = null;
 
       this.ws.on('open', () => {
+        // Initialize zlib decompressor for zlib-stream after WebSocket is open
+        // This ensures the decompressor is ready before any data arrives
+        this.decompressor = zlib.createInflateRaw({
+          chunkSize: 1024 * 16, // 16KB chunks
+          flush: zlib.constants.Z_SYNC_FLUSH,
+        });
+
+        this.decompressor.on('data', (chunk: Buffer) => {
+          this.inflateBuffer = Buffer.concat([this.inflateBuffer, chunk]);
+          // Try to parse complete JSON messages
+          this.processInflateBuffer();
+        });
+
+        this.decompressor.on('error', (error: Error) => {
+          console.error(`[wss-${this.account.getDisplay()}] Decompressor error:`, error);
+          // Decompressor error means the stream is corrupted - cannot recover mid-stream
+          // Close the connection and trigger reconnect
+          if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+            this.ws.close(DiscordGateway.CLOSE_CODE_EXCEPTION, 'decompressor error');
+          }
+        });
+
         // Connection opened - resolve immediately
         // The actual connection success is signaled by onSuccess() when READY/RESUMED is received
         resolve();
@@ -224,7 +213,14 @@ export class DiscordGateway {
    * Handle WebSocket message (buffer for zlib-stream)
    */
   private handleWebSocketMessage(data: Buffer): void {
+    // Validate connection state before processing
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+      return;
+    }
+
+    // Validate decompressor exists and is ready
     if (!this.decompressor) {
+      console.warn(`[wss-${this.account.getDisplay()}] Received data but decompressor not initialized`);
       return;
     }
 
@@ -233,6 +229,10 @@ export class DiscordGateway {
       this.decompressor.write(data);
     } catch (error) {
       console.error(`[wss-${this.account.getDisplay()}] Error writing to decompressor:`, error);
+      // If write fails, close connection to trigger reconnect
+      if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+        this.ws.close(DiscordGateway.CLOSE_CODE_EXCEPTION, 'decompressor write error');
+      }
     }
   }
 
@@ -519,30 +519,35 @@ export class DiscordGateway {
     this.clearHeartbeatInterval();
     this.clearHeartbeatTimeout();
 
+    // Close WebSocket first
     if (this.ws) {
       try {
         if (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING) {
           this.sessionClosing = true;
+          // Remove listeners to prevent event handling during cleanup
           this.ws.removeAllListeners();
           this.ws.close();
         }
       } catch (error) {
-        // Ignore
+        // Ignore cleanup errors
       }
       this.ws = null;
     }
 
+    // Then cleanup decompressor (after WebSocket is closed to prevent new data)
     if (this.decompressor) {
       try {
+        // Remove all event listeners first
         this.decompressor.removeAllListeners();
+        // End the stream gracefully
         this.decompressor.end();
       } catch (error) {
-        // Ignore cleanup errors
+        // Ignore cleanup errors - decompressor may already be closed
       }
       this.decompressor = null;
     }
     
-    // Reset buffer
+    // Reset buffer last
     this.inflateBuffer = Buffer.alloc(0);
   }
 
