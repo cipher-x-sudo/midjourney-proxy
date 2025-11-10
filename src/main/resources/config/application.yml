@@ -8,6 +8,8 @@ logging:
     com.github.novicezk.midjourney: debug
 knife4j:
   enable: true
+  setting:
+    language: en
   openapi:
     title: Midjourney Proxy API Documentation
     description: Proxy MidJourney's Discord channel to enable API-based AI image generation
