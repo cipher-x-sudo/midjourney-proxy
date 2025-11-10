@@ -44,10 +44,21 @@ export async function createApp(): Promise<FastifyInstance> {
     origin: true,
   });
 
+  // API routes with authentication
+  const apiPrefix = config.server.contextPath || '/mj';
+
   // Register static files (only for doc.html and other static assets)
+  // Register at root level
   await app.register(fastifyStatic, {
     root: path.join(__dirname, '../public'),
     prefix: '/',
+    decorateReply: false,
+  });
+
+  // Also register at context path for compatibility
+  await app.register(fastifyStatic, {
+    root: path.join(__dirname, '../public'),
+    prefix: apiPrefix,
     decorateReply: false,
   });
 
@@ -85,9 +96,6 @@ export async function createApp(): Promise<FastifyInstance> {
   // Start task timeout schedule
   const taskTimeoutSchedule = new TaskTimeoutSchedule(discordLoadBalancer);
   taskTimeoutSchedule.start();
-
-  // API routes with authentication
-  const apiPrefix = config.server.contextPath || '/mj';
 
   // Health check endpoint (both at root and context path for compatibility)
   app.get('/health', async (request, reply) => {
@@ -170,6 +178,11 @@ export async function createApp(): Promise<FastifyInstance> {
   // Root redirect to doc.html
   app.get('/', async (request, reply) => {
     return reply.redirect('/doc.html');
+  });
+
+  // Also redirect context path root to doc.html
+  app.get(apiPrefix, async (request, reply) => {
+    return reply.redirect(`${apiPrefix}/doc.html`);
   });
 
   return app;
