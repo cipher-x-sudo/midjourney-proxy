@@ -2,7 +2,6 @@ package com.github.novicezk.midjourney.domain;
 
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
-import io.swagger.annotations.ApiModelProperty;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -14,7 +13,6 @@ import java.util.Map;
 public class DomainObject implements Serializable {
 	@Getter
 	@Setter
-	@ApiModelProperty("ID")
 	protected String id;
 
 	@Setter

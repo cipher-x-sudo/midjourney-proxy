@@ -6,18 +6,3 @@ logging:
   level:
     ROOT: info
     com.github.novicezk.midjourney: debug
-knife4j:
-  enable: true
-  openapi:
-    title: Midjourney Proxy API Documentation
-    description: Proxy MidJourney's Discord channel to enable API-based AI image generation
-    concat: novicezk
-    url: https://github.com/novicezk/midjourney-proxy
-    version: v2.6.3
-    terms-of-service-url: https://github.com/novicezk/midjourney-proxy
-    group:
-      api:
-        group-name: API
-        api-rule: package
-        api-rule-resources:
-          - com.github.novicezk.midjourney.controller

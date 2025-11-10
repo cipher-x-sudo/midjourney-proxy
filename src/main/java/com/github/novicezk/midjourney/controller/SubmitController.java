@@ -28,8 +28,6 @@ import com.github.novicezk.midjourney.util.TaskChangeParams;
 import eu.maxschuster.dataurl.DataUrl;
 import eu.maxschuster.dataurl.DataUrlSerializer;
 import eu.maxschuster.dataurl.IDataUrlSerializer;
-import io.swagger.annotations.Api;
-import io.swagger.annotations.ApiOperation;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -44,7 +42,6 @@ import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-@Api(tags = "Task Submission")
 @RestController
 @RequestMapping("/submit")
 @RequiredArgsConstructor
@@ -54,7 +51,6 @@ public class SubmitController {
 	private final ProxyProperties properties;
 	private final TaskService taskService;
 
-	@ApiOperation(value = "Submit Imagine Task")
 	@PostMapping("/imagine")
 	public SubmitResultVO imagine(@RequestBody SubmitImagineDTO imagineDTO) {
 		String prompt = imagineDTO.getPrompt();
@@ -87,7 +83,6 @@ public class SubmitController {
 		return this.taskService.submitImagine(task, dataUrls);
 	}
 
-	@ApiOperation(value = "Image Variation - Simple")
 	@PostMapping("/simple-change")
 	public SubmitResultVO simpleChange(@RequestBody SubmitSimpleChangeDTO simpleChangeDTO) {
 		TaskChangeParams changeParams = ConvertUtils.convertChangeParams(simpleChangeDTO.getContent());
@@ -103,7 +98,6 @@ public class SubmitController {
 		return change(changeDTO);
 	}
 
-	@ApiOperation(value = "Image Variation")
 	@PostMapping("/change")
 	public SubmitResultVO change(@RequestBody SubmitChangeDTO changeDTO) {
 		if (CharSequenceUtil.isBlank(changeDTO.getTaskId())) {
@@ -149,7 +143,6 @@ public class SubmitController {
 		}
 	}
 
-	@ApiOperation(value = "Submit Describe Task")
 	@PostMapping("/describe")
 	public SubmitResultVO describe(@RequestBody SubmitDescribeDTO describeDTO) {
 		if (CharSequenceUtil.isBlank(describeDTO.getBase64())) {
@@ -169,7 +162,6 @@ public class SubmitController {
 		return this.taskService.submitDescribe(task, dataUrl);
 	}
 
-	@ApiOperation(value = "Submit Blend Task")
 	@PostMapping("/blend")
 	public SubmitResultVO blend(@RequestBody SubmitBlendDTO blendDTO) {
 		List<String> base64Array = blendDTO.getBase64Array();

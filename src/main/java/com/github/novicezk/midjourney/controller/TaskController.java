@@ -6,9 +6,6 @@ import com.github.novicezk.midjourney.dto.TaskConditionDTO;
 import com.github.novicezk.midjourney.loadbalancer.DiscordLoadBalancer;
 import com.github.novicezk.midjourney.service.TaskStoreService;
 import com.github.novicezk.midjourney.support.Task;
-import io.swagger.annotations.Api;
-import io.swagger.annotations.ApiOperation;
-import io.swagger.annotations.ApiParam;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -25,7 +22,6 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
-@Api(tags = "Task Query")
 @RestController
 @RequestMapping("/task")
 @RequiredArgsConstructor
@@ -33,15 +29,13 @@ public class TaskController {
 	private final TaskStoreService taskStoreService;
 	private final DiscordLoadBalancer discordLoadBalancer;
 
-	@ApiOperation(value = "Get Task by ID")
 	@GetMapping("/{id}/fetch")
-	public Task fetch(@ApiParam(value = "Task ID") @PathVariable String id) {
+	public Task fetch(@PathVariable String id) {
 		Optional<Task> queueTaskOptional = this.discordLoadBalancer.getQueueTasks().stream()
 				.filter(t -> CharSequenceUtil.equals(t.getId(), id)).findFirst();
 		return queueTaskOptional.orElseGet(() -> this.taskStoreService.get(id));
 	}
 
-	@ApiOperation(value = "Query Task Queue")
 	@GetMapping("/queue")
 	public List<Task> queue() {
 		return this.discordLoadBalancer.getQueueTasks().stream()
@@ -49,7 +43,6 @@ public class TaskController {
 				.toList();
 	}
 
-	@ApiOperation(value = "Query All Tasks")
 	@GetMapping("/list")
 	public List<Task> list() {
 		return this.taskStoreService.list().stream()
@@ -57,7 +50,6 @@ public class TaskController {
 				.toList();
 	}
 
-	@ApiOperation(value = "Query Tasks by ID List")
 	@PostMapping("/list-by-condition")
 	public List<Task> listByIds(@RequestBody TaskConditionDTO conditionDTO) {
 		if (conditionDTO.getIds() == null) {

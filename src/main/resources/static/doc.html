@@ -1,0 +1,1567 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Midjourney Proxy API Documentation</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: #f5f5f5;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 40px 20px;
+            margin-bottom: 30px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        header p {
+            font-size: 1.1em;
+            opacity: 0.9;
+        }
+
+        .base-url {
+            background: rgba(255, 255, 255, 0.2);
+            padding: 8px 16px;
+            border-radius: 4px;
+            display: inline-block;
+            margin-top: 10px;
+            font-family: monospace;
+        }
+
+        nav {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 30px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            position: sticky;
+            top: 20px;
+            z-index: 100;
+        }
+
+        nav ul {
+            list-style: none;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+
+        nav a {
+            color: #667eea;
+            text-decoration: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            transition: background 0.3s;
+        }
+
+        nav a:hover {
+            background: #f0f0f0;
+        }
+
+        section {
+            background: white;
+            padding: 30px;
+            margin-bottom: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        section h2 {
+            color: #667eea;
+            font-size: 2em;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #667eea;
+        }
+
+        section h3 {
+            color: #764ba2;
+            font-size: 1.5em;
+            margin-top: 30px;
+            margin-bottom: 15px;
+        }
+
+        section h4 {
+            color: #555;
+            font-size: 1.2em;
+            margin-top: 20px;
+            margin-bottom: 10px;
+        }
+
+        .endpoint {
+            margin-bottom: 40px;
+            padding: 20px;
+            background: #f9f9f9;
+            border-radius: 6px;
+            border-left: 4px solid #667eea;
+        }
+
+        .method {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 4px;
+            font-weight: bold;
+            font-size: 0.9em;
+            margin-right: 10px;
+        }
+
+        .method.post {
+            background: #49cc90;
+            color: white;
+        }
+
+        .method.get {
+            background: #61affe;
+            color: white;
+        }
+
+        .endpoint-path {
+            font-family: monospace;
+            font-size: 1.1em;
+            color: #333;
+            font-weight: bold;
+        }
+
+        .description {
+            margin: 15px 0;
+            color: #666;
+        }
+
+        .params-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            background: white;
+        }
+
+        .params-table th,
+        .params-table td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+
+        .params-table th {
+            background: #f5f5f5;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .params-table tr:hover {
+            background: #f9f9f9;
+        }
+
+        .required {
+            color: #e74c3c;
+            font-weight: bold;
+        }
+
+        .code-block {
+            background: #2d2d2d;
+            color: #f8f8f2;
+            padding: 20px;
+            border-radius: 6px;
+            overflow-x: auto;
+            margin: 15px 0;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+            line-height: 1.5;
+        }
+
+        .code-block pre {
+            margin: 0;
+        }
+
+        .test-form {
+            background: #f9f9f9;
+            padding: 20px;
+            border-radius: 6px;
+            margin-top: 20px;
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .form-group input,
+        .form-group textarea,
+        .form-group select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-family: inherit;
+            font-size: 0.95em;
+        }
+
+        .form-group textarea {
+            min-height: 100px;
+            font-family: monospace;
+        }
+
+        .btn {
+            background: #667eea;
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 1em;
+            font-weight: 600;
+            transition: background 0.3s;
+        }
+
+        .btn:hover {
+            background: #5568d3;
+        }
+
+        .btn:active {
+            transform: scale(0.98);
+        }
+
+        .response {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 6px;
+            display: none;
+        }
+
+        .response.success {
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+        }
+
+        .response.error {
+            background: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+        }
+
+        .response pre {
+            margin: 0;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 3px;
+            font-size: 0.8em;
+            font-weight: 600;
+            margin-left: 5px;
+        }
+
+        .badge.required {
+            background: #e74c3c;
+            color: white;
+        }
+
+        .badge.optional {
+            background: #95a5a6;
+            color: white;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+
+        table th,
+        table td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+
+        table th {
+            background: #f5f5f5;
+            font-weight: 600;
+        }
+
+        .response-codes {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+
+        .response-code {
+            padding: 15px;
+            background: #f9f9f9;
+            border-radius: 6px;
+            border-left: 4px solid #667eea;
+        }
+
+        .response-code .code {
+            font-weight: bold;
+            color: #667eea;
+            font-size: 1.2em;
+        }
+
+        .response-code .desc {
+            color: #666;
+            margin-top: 5px;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 20px;
+            color: #667eea;
+        }
+
+        .loading.active {
+            display: block;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 10px;
+            }
+
+            header h1 {
+                font-size: 2em;
+            }
+
+            nav ul {
+                flex-direction: column;
+            }
+
+            section {
+                padding: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Midjourney Proxy API Documentation</h1>
+            <p>Proxy MidJourney's Discord channel to enable API-based AI image generation</p>
+            <div class="base-url">Base URL: /mj</div>
+            <p style="margin-top: 10px; font-size: 0.9em;">Version: v2.6.3</p>
+        </header>
+
+        <nav>
+            <ul>
+                <li><a href="#overview">Overview</a></li>
+                <li><a href="#task-submission">Task Submission</a></li>
+                <li><a href="#task-query">Task Query</a></li>
+                <li><a href="#account-query">Account Query</a></li>
+                <li><a href="#data-structures">Data Structures</a></li>
+                <li><a href="#response-codes">Response Codes</a></li>
+            </ul>
+        </nav>
+
+        <section id="overview">
+            <h2>Overview</h2>
+            <p>This API provides endpoints to interact with Midjourney through Discord. You can submit image generation tasks, query task status, and manage Discord accounts.</p>
+            
+            <h3>Authentication</h3>
+            <p>If API secret is configured, all endpoints (except documentation) require authentication via the <code>mj-api-secret</code> header.</p>
+
+            <h3>Base URL</h3>
+            <p>All API endpoints are prefixed with <code>/mj</code></p>
+        </section>
+
+        <section id="task-submission">
+            <h2>Task Submission</h2>
+
+            <div class="endpoint">
+                <div>
+                    <span class="method post">POST</span>
+                    <span class="endpoint-path">/submit/imagine</span>
+                </div>
+                <div class="description">
+                    <h4>Submit Imagine Task</h4>
+                    <p>Submit a task to generate an image from a text prompt.</p>
+                </div>
+
+                <h4>Request Parameters</h4>
+                <table class="params-table">
+                    <thead>
+                        <tr>
+                            <th>Parameter</th>
+                            <th>Type</th>
+                            <th>Required</th>
+                            <th>Description</th>
+                            <th>Example</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>prompt</td>
+                            <td>string</td>
+                            <td><span class="required">Yes</span></td>
+                            <td>Text prompt for image generation</td>
+                            <td>"Cat"</td>
+                        </tr>
+                        <tr>
+                            <td>base64Array</td>
+                            <td>array[string]</td>
+                            <td>No</td>
+                            <td>Base64 array of reference images</td>
+                            <td>["data:image/png;base64,xxx"]</td>
+                        </tr>
+                        <tr>
+                            <td>state</td>
+                            <td>string</td>
+                            <td>No</td>
+                            <td>Custom parameters</td>
+                            <td>-</td>
+                        </tr>
+                        <tr>
+                            <td>notifyHook</td>
+                            <td>string</td>
+                            <td>No</td>
+                            <td>Callback address, uses global notifyHook when empty</td>
+                            <td>-</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h4>Request Example</h4>
+                <div class="code-block">
+                    <pre>{
+  "prompt": "A beautiful sunset over mountains",
+  "base64Array": [],
+  "state": "custom-state",
+  "notifyHook": "https://example.com/webhook"
+}</pre>
+                </div>
+
+                <h4>Response Example</h4>
+                <div class="code-block">
+                    <pre>{
+  "code": 1,
+  "description": "Success",
+  "result": "8498455807619990",
+  "properties": {
+    "discordInstanceId": "1118138338562560102"
+  }
+}</pre>
+                </div>
+
+                <div class="test-form">
+                    <h4>Test Endpoint</h4>
+                    <form onsubmit="testEndpoint(event, 'POST', '/submit/imagine')">
+                        <div class="form-group">
+                            <label>Prompt <span class="required">*</span></label>
+                            <input type="text" name="prompt" required placeholder="A beautiful sunset">
+                        </div>
+                        <div class="form-group">
+                            <label>Base64 Array (JSON)</label>
+                            <textarea name="base64Array" placeholder='[]'></textarea>
+                        </div>
+                        <div class="form-group">
+                            <label>State</label>
+                            <input type="text" name="state" placeholder="custom-state">
+                        </div>
+                        <div class="form-group">
+                            <label>Notify Hook</label>
+                            <input type="text" name="notifyHook" placeholder="https://example.com/webhook">
+                        </div>
+                        <button type="submit" class="btn">Submit</button>
+                    </form>
+                    <div class="loading">Loading...</div>
+                    <div class="response"></div>
+                </div>
+            </div>
+
+            <div class="endpoint">
+                <div>
+                    <span class="method post">POST</span>
+                    <span class="endpoint-path">/submit/change</span>
+                </div>
+                <div class="description">
+                    <h4>Image Variation</h4>
+                    <p>Submit a variation task (upscale, variation, or reroll) for an existing task.</p>
+                </div>
+
+                <h4>Request Parameters</h4>
+                <table class="params-table">
+                    <thead>
+                        <tr>
+                            <th>Parameter</th>
+                            <th>Type</th>
+                            <th>Required</th>
+                            <th>Description</th>
+                            <th>Example</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>taskId</td>
+                            <td>string</td>
+                            <td><span class="required">Yes</span></td>
+                            <td>Task ID</td>
+                            <td>"1320098173412546"</td>
+                        </tr>
+                        <tr>
+                            <td>action</td>
+                            <td>string</td>
+                            <td><span class="required">Yes</span></td>
+                            <td>UPSCALE (Enlarge); VARIATION (Variation); REROLL (Regenerate)</td>
+                            <td>"UPSCALE"</td>
+                        </tr>
+                        <tr>
+                            <td>index</td>
+                            <td>integer</td>
+                            <td>Conditional</td>
+                            <td>Index (1~4), required when action is UPSCALE or VARIATION</td>
+                            <td>1</td>
+                        </tr>
+                        <tr>
+                            <td>state</td>
+                            <td>string</td>
+                            <td>No</td>
+                            <td>Custom parameters</td>
+                            <td>-</td>
+                        </tr>
+                        <tr>
+                            <td>notifyHook</td>
+                            <td>string</td>
+                            <td>No</td>
+                            <td>Callback address</td>
+                            <td>-</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h4>Request Example</h4>
+                <div class="code-block">
+                    <pre>{
+  "taskId": "1320098173412546",
+  "action": "UPSCALE",
+  "index": 1,
+  "state": "custom-state",
+  "notifyHook": "https://example.com/webhook"
+}</pre>
+                </div>
+
+                <div class="test-form">
+                    <h4>Test Endpoint</h4>
+                    <form onsubmit="testEndpoint(event, 'POST', '/submit/change')">
+                        <div class="form-group">
+                            <label>Task ID <span class="required">*</span></label>
+                            <input type="text" name="taskId" required placeholder="1320098173412546">
+                        </div>
+                        <div class="form-group">
+                            <label>Action <span class="required">*</span></label>
+                            <select name="action" required>
+                                <option value="UPSCALE">UPSCALE</option>
+                                <option value="VARIATION">VARIATION</option>
+                                <option value="REROLL">REROLL</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Index</label>
+                            <input type="number" name="index" min="1" max="4" placeholder="1">
+                        </div>
+                        <div class="form-group">
+                            <label>State</label>
+                            <input type="text" name="state" placeholder="custom-state">
+                        </div>
+                        <div class="form-group">
+                            <label>Notify Hook</label>
+                            <input type="text" name="notifyHook" placeholder="https://example.com/webhook">
+                        </div>
+                        <button type="submit" class="btn">Submit</button>
+                    </form>
+                    <div class="loading">Loading...</div>
+                    <div class="response"></div>
+                </div>
+            </div>
+
+            <div class="endpoint">
+                <div>
+                    <span class="method post">POST</span>
+                    <span class="endpoint-path">/submit/simple-change</span>
+                </div>
+                <div class="description">
+                    <h4>Image Variation - Simple</h4>
+                    <p>Simplified variation endpoint. Accepts content in format: "ID operation" (e.g., "1320098173412546 U2").</p>
+                    <p><strong>Operations:</strong> U1~U4 (Upscale), V1~V4 (Variation), R (Reroll)</p>
+                </div>
+
+                <h4>Request Parameters</h4>
+                <table class="params-table">
+                    <thead>
+                        <tr>
+                            <th>Parameter</th>
+                            <th>Type</th>
+                            <th>Required</th>
+                            <th>Description</th>
+                            <th>Example</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>content</td>
+                            <td>string</td>
+                            <td><span class="required">Yes</span></td>
+                            <td>Variation description: ID $action$index</td>
+                            <td>"1320098173412546 U2"</td>
+                        </tr>
+                        <tr>
+                            <td>state</td>
+                            <td>string</td>
+                            <td>No</td>
+                            <td>Custom parameters</td>
+                            <td>-</td>
+                        </tr>
+                        <tr>
+                            <td>notifyHook</td>
+                            <td>string</td>
+                            <td>No</td>
+                            <td>Callback address</td>
+                            <td>-</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h4>Request Example</h4>
+                <div class="code-block">
+                    <pre>{
+  "content": "1320098173412546 U2",
+  "state": "custom-state",
+  "notifyHook": "https://example.com/webhook"
+}</pre>
+                </div>
+
+                <div class="test-form">
+                    <h4>Test Endpoint</h4>
+                    <form onsubmit="testEndpoint(event, 'POST', '/submit/simple-change')">
+                        <div class="form-group">
+                            <label>Content <span class="required">*</span></label>
+                            <input type="text" name="content" required placeholder="1320098173412546 U2">
+                        </div>
+                        <div class="form-group">
+                            <label>State</label>
+                            <input type="text" name="state" placeholder="custom-state">
+                        </div>
+                        <div class="form-group">
+                            <label>Notify Hook</label>
+                            <input type="text" name="notifyHook" placeholder="https://example.com/webhook">
+                        </div>
+                        <button type="submit" class="btn">Submit</button>
+                    </form>
+                    <div class="loading">Loading...</div>
+                    <div class="response"></div>
+                </div>
+            </div>
+
+            <div class="endpoint">
+                <div>
+                    <span class="method post">POST</span>
+                    <span class="endpoint-path">/submit/describe</span>
+                </div>
+                <div class="description">
+                    <h4>Submit Describe Task</h4>
+                    <p>Generate a prompt description from an image (image to text).</p>
+                </div>
+
+                <h4>Request Parameters</h4>
+                <table class="params-table">
+                    <thead>
+                        <tr>
+                            <th>Parameter</th>
+                            <th>Type</th>
+                            <th>Required</th>
+                            <th>Description</th>
+                            <th>Example</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>base64</td>
+                            <td>string</td>
+                            <td><span class="required">Yes</span></td>
+                            <td>Image base64</td>
+                            <td>"data:image/png;base64,xxx"</td>
+                        </tr>
+                        <tr>
+                            <td>state</td>
+                            <td>string</td>
+                            <td>No</td>
+                            <td>Custom parameters</td>
+                            <td>-</td>
+                        </tr>
+                        <tr>
+                            <td>notifyHook</td>
+                            <td>string</td>
+                            <td>No</td>
+                            <td>Callback address</td>
+                            <td>-</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h4>Request Example</h4>
+                <div class="code-block">
+                    <pre>{
+  "base64": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA..."
+}</pre>
+                </div>
+
+                <h4>Response Example (Task completed)</h4>
+                <div class="code-block">
+                    <pre>{
+  "id": "14001929738841620",
+  "action": "DESCRIBE",
+  "status": "SUCCESS",
+  "description": "/describe 14001929738841620.png",
+  "imageUrl": "https://cdn.discordapp.com/attachments/xxx/xxx/14001929738841620.png",
+  "properties": {
+    "finalPrompt": "1️⃣ Cat --ar 5:4\n\n2️⃣ Cat2 --ar 5:4\n\n3️⃣ Cat3 --ar 5:4\n\n4️⃣ Cat4 --ar 5:4"
+  }
+}</pre>
+                </div>
+
+                <div class="test-form">
+                    <h4>Test Endpoint</h4>
+                    <form onsubmit="testEndpoint(event, 'POST', '/submit/describe')">
+                        <div class="form-group">
+                            <label>Base64 <span class="required">*</span></label>
+                            <textarea name="base64" required placeholder="data:image/png;base64,xxx"></textarea>
+                        </div>
+                        <div class="form-group">
+                            <label>State</label>
+                            <input type="text" name="state" placeholder="custom-state">
+                        </div>
+                        <div class="form-group">
+                            <label>Notify Hook</label>
+                            <input type="text" name="notifyHook" placeholder="https://example.com/webhook">
+                        </div>
+                        <button type="submit" class="btn">Submit</button>
+                    </form>
+                    <div class="loading">Loading...</div>
+                    <div class="response"></div>
+                </div>
+            </div>
+
+            <div class="endpoint">
+                <div>
+                    <span class="method post">POST</span>
+                    <span class="endpoint-path">/submit/blend</span>
+                </div>
+                <div class="description">
+                    <h4>Submit Blend Task</h4>
+                    <p>Blend multiple images together.</p>
+                </div>
+
+                <h4>Request Parameters</h4>
+                <table class="params-table">
+                    <thead>
+                        <tr>
+                            <th>Parameter</th>
+                            <th>Type</th>
+                            <th>Required</th>
+                            <th>Description</th>
+                            <th>Example</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>base64Array</td>
+                            <td>array[string]</td>
+                            <td><span class="required">Yes</span></td>
+                            <td>Base64 array of images (2-5 images)</td>
+                            <td>["data:image/png;base64,xxx1", "data:image/png;base64,xxx2"]</td>
+                        </tr>
+                        <tr>
+                            <td>dimensions</td>
+                            <td>string</td>
+                            <td>No</td>
+                            <td>Aspect ratio: PORTRAIT (2:3); SQUARE (1:1); LANDSCAPE (3:2)</td>
+                            <td>"SQUARE"</td>
+                        </tr>
+                        <tr>
+                            <td>state</td>
+                            <td>string</td>
+                            <td>No</td>
+                            <td>Custom parameters</td>
+                            <td>-</td>
+                        </tr>
+                        <tr>
+                            <td>notifyHook</td>
+                            <td>string</td>
+                            <td>No</td>
+                            <td>Callback address</td>
+                            <td>-</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h4>Request Example</h4>
+                <div class="code-block">
+                    <pre>{
+  "base64Array": [
+    "data:image/png;base64,xxx1",
+    "data:image/png;base64,xxx2"
+  ],
+  "dimensions": "SQUARE",
+  "state": "custom-state",
+  "notifyHook": "https://example.com/webhook"
+}</pre>
+                </div>
+
+                <div class="test-form">
+                    <h4>Test Endpoint</h4>
+                    <form onsubmit="testEndpoint(event, 'POST', '/submit/blend')">
+                        <div class="form-group">
+                            <label>Base64 Array (JSON) <span class="required">*</span></label>
+                            <textarea name="base64Array" required placeholder='["data:image/png;base64,xxx1", "data:image/png;base64,xxx2"]'></textarea>
+                        </div>
+                        <div class="form-group">
+                            <label>Dimensions</label>
+                            <select name="dimensions">
+                                <option value="PORTRAIT">PORTRAIT (2:3)</option>
+                                <option value="SQUARE" selected>SQUARE (1:1)</option>
+                                <option value="LANDSCAPE">LANDSCAPE (3:2)</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>State</label>
+                            <input type="text" name="state" placeholder="custom-state">
+                        </div>
+                        <div class="form-group">
+                            <label>Notify Hook</label>
+                            <input type="text" name="notifyHook" placeholder="https://example.com/webhook">
+                        </div>
+                        <button type="submit" class="btn">Submit</button>
+                    </form>
+                    <div class="loading">Loading...</div>
+                    <div class="response"></div>
+                </div>
+            </div>
+        </section>
+
+        <section id="task-query">
+            <h2>Task Query</h2>
+
+            <div class="endpoint">
+                <div>
+                    <span class="method get">GET</span>
+                    <span class="endpoint-path">/task/{id}/fetch</span>
+                </div>
+                <div class="description">
+                    <h4>Get Task by ID</h4>
+                    <p>Retrieve a task by its ID. Returns task from queue or stored tasks.</p>
+                </div>
+
+                <h4>Path Parameters</h4>
+                <table class="params-table">
+                    <thead>
+                        <tr>
+                            <th>Parameter</th>
+                            <th>Type</th>
+                            <th>Required</th>
+                            <th>Description</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>id</td>
+                            <td>string</td>
+                            <td><span class="required">Yes</span></td>
+                            <td>Task ID</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h4>Response Example</h4>
+                <div class="code-block">
+                    <pre>{
+  "id": "8498455807619990",
+  "action": "IMAGINE",
+  "status": "SUCCESS",
+  "prompt": "A beautiful sunset",
+  "promptEn": "A beautiful sunset",
+  "description": "/imagine A beautiful sunset",
+  "submitTime": 1689231405854,
+  "startTime": 1689231442755,
+  "finishTime": 1689231544312,
+  "progress": "100%",
+  "imageUrl": "https://cdn.discordapp.com/attachments/xxx/xxx/xxxx.png",
+  "failReason": null,
+  "properties": {
+    "finalPrompt": "A beautiful sunset"
+  }
+}</pre>
+                </div>
+
+                <div class="test-form">
+                    <h4>Test Endpoint</h4>
+                    <form onsubmit="testEndpoint(event, 'GET', '/task/{id}/fetch', true)">
+                        <div class="form-group">
+                            <label>Task ID <span class="required">*</span></label>
+                            <input type="text" name="id" required placeholder="8498455807619990">
+                        </div>
+                        <button type="submit" class="btn">Fetch</button>
+                    </form>
+                    <div class="loading">Loading...</div>
+                    <div class="response"></div>
+                </div>
+            </div>
+
+            <div class="endpoint">
+                <div>
+                    <span class="method get">GET</span>
+                    <span class="endpoint-path">/task/queue</span>
+                </div>
+                <div class="description">
+                    <h4>Query Task Queue</h4>
+                    <p>Get all tasks currently in the queue, sorted by submit time.</p>
+                </div>
+
+                <h4>Response Example</h4>
+                <div class="code-block">
+                    <pre>[
+  {
+    "id": "8498455807619990",
+    "action": "IMAGINE",
+    "status": "SUBMITTED",
+    "prompt": "A beautiful sunset",
+    "submitTime": 1689231405854
+  }
+]</pre>
+                </div>
+
+                <div class="test-form">
+                    <h4>Test Endpoint</h4>
+                    <form onsubmit="testEndpoint(event, 'GET', '/task/queue')">
+                        <button type="submit" class="btn">Get Queue</button>
+                    </form>
+                    <div class="loading">Loading...</div>
+                    <div class="response"></div>
+                </div>
+            </div>
+
+            <div class="endpoint">
+                <div>
+                    <span class="method get">GET</span>
+                    <span class="endpoint-path">/task/list</span>
+                </div>
+                <div class="description">
+                    <h4>Query All Tasks</h4>
+                    <p>Get all stored tasks, sorted by submit time (newest first).</p>
+                </div>
+
+                <h4>Response Example</h4>
+                <div class="code-block">
+                    <pre>[
+  {
+    "id": "8498455807619990",
+    "action": "IMAGINE",
+    "status": "SUCCESS",
+    "prompt": "A beautiful sunset",
+    "submitTime": 1689231405854
+  }
+]</pre>
+                </div>
+
+                <div class="test-form">
+                    <h4>Test Endpoint</h4>
+                    <form onsubmit="testEndpoint(event, 'GET', '/task/list')">
+                        <button type="submit" class="btn">Get All Tasks</button>
+                    </form>
+                    <div class="loading">Loading...</div>
+                    <div class="response"></div>
+                </div>
+            </div>
+
+            <div class="endpoint">
+                <div>
+                    <span class="method post">POST</span>
+                    <span class="endpoint-path">/task/list-by-condition</span>
+                </div>
+                <div class="description">
+                    <h4>Query Tasks by ID List</h4>
+                    <p>Query multiple tasks by their IDs.</p>
+                </div>
+
+                <h4>Request Parameters</h4>
+                <table class="params-table">
+                    <thead>
+                        <tr>
+                            <th>Parameter</th>
+                            <th>Type</th>
+                            <th>Required</th>
+                            <th>Description</th>
+                            <th>Example</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>ids</td>
+                            <td>array[string]</td>
+                            <td>No</td>
+                            <td>List of task IDs</td>
+                            <td>["8498455807619990", "1320098173412546"]</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h4>Request Example</h4>
+                <div class="code-block">
+                    <pre>{
+  "ids": ["8498455807619990", "1320098173412546"]
+}</pre>
+                </div>
+
+                <div class="test-form">
+                    <h4>Test Endpoint</h4>
+                    <form onsubmit="testEndpoint(event, 'POST', '/task/list-by-condition')">
+                        <div class="form-group">
+                            <label>IDs (JSON Array)</label>
+                            <textarea name="ids" placeholder='["8498455807619990", "1320098173412546"]'></textarea>
+                        </div>
+                        <button type="submit" class="btn">Query</button>
+                    </form>
+                    <div class="loading">Loading...</div>
+                    <div class="response"></div>
+                </div>
+            </div>
+        </section>
+
+        <section id="account-query">
+            <h2>Account Query</h2>
+
+            <div class="endpoint">
+                <div>
+                    <span class="method get">GET</span>
+                    <span class="endpoint-path">/account/{id}/fetch</span>
+                </div>
+                <div class="description">
+                    <h4>Get Account by ID</h4>
+                    <p>Retrieve a Discord account by its ID.</p>
+                </div>
+
+                <h4>Path Parameters</h4>
+                <table class="params-table">
+                    <thead>
+                        <tr>
+                            <th>Parameter</th>
+                            <th>Type</th>
+                            <th>Required</th>
+                            <th>Description</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>id</td>
+                            <td>string</td>
+                            <td><span class="required">Yes</span></td>
+                            <td>Account ID</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h4>Response Example</h4>
+                <div class="code-block">
+                    <pre>{
+  "id": "1118138338562560102",
+  "guildId": "123456789",
+  "channelId": "987654321",
+  "enable": true,
+  "coreSize": 3,
+  "queueSize": 10,
+  "timeoutMinutes": 5
+}</pre>
+                </div>
+
+                <div class="test-form">
+                    <h4>Test Endpoint</h4>
+                    <form onsubmit="testEndpoint(event, 'GET', '/account/{id}/fetch', true)">
+                        <div class="form-group">
+                            <label>Account ID <span class="required">*</span></label>
+                            <input type="text" name="id" required placeholder="1118138338562560102">
+                        </div>
+                        <button type="submit" class="btn">Fetch</button>
+                    </form>
+                    <div class="loading">Loading...</div>
+                    <div class="response"></div>
+                </div>
+            </div>
+
+            <div class="endpoint">
+                <div>
+                    <span class="method get">GET</span>
+                    <span class="endpoint-path">/account/list</span>
+                </div>
+                <div class="description">
+                    <h4>Query All Accounts</h4>
+                    <p>Get all configured Discord accounts.</p>
+                </div>
+
+                <h4>Response Example</h4>
+                <div class="code-block">
+                    <pre>[
+  {
+    "id": "1118138338562560102",
+    "guildId": "123456789",
+    "channelId": "987654321",
+    "enable": true,
+    "coreSize": 3,
+    "queueSize": 10
+  }
+]</pre>
+                </div>
+
+                <div class="test-form">
+                    <h4>Test Endpoint</h4>
+                    <form onsubmit="testEndpoint(event, 'GET', '/account/list')">
+                        <button type="submit" class="btn">Get All Accounts</button>
+                    </form>
+                    <div class="loading">Loading...</div>
+                    <div class="response"></div>
+                </div>
+            </div>
+        </section>
+
+        <section id="data-structures">
+            <h2>Data Structures</h2>
+
+            <h3>Task</h3>
+            <table class="params-table">
+                <thead>
+                    <tr>
+                        <th>Field</th>
+                        <th>Type</th>
+                        <th>Description</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>id</td>
+                        <td>string</td>
+                        <td>Task ID</td>
+                    </tr>
+                    <tr>
+                        <td>action</td>
+                        <td>string</td>
+                        <td>Task type: IMAGINE, UPSCALE, VARIATION, REROLL, DESCRIBE, BLEND</td>
+                    </tr>
+                    <tr>
+                        <td>status</td>
+                        <td>string</td>
+                        <td>Task status: NOT_START, SUBMITTED, IN_PROGRESS, FAILURE, SUCCESS</td>
+                    </tr>
+                    <tr>
+                        <td>prompt</td>
+                        <td>string</td>
+                        <td>Prompt</td>
+                    </tr>
+                    <tr>
+                        <td>promptEn</td>
+                        <td>string</td>
+                        <td>Prompt - English</td>
+                    </tr>
+                    <tr>
+                        <td>description</td>
+                        <td>string</td>
+                        <td>Task description</td>
+                    </tr>
+                    <tr>
+                        <td>state</td>
+                        <td>string</td>
+                        <td>Custom parameters</td>
+                    </tr>
+                    <tr>
+                        <td>submitTime</td>
+                        <td>number</td>
+                        <td>Submit time</td>
+                    </tr>
+                    <tr>
+                        <td>startTime</td>
+                        <td>number</td>
+                        <td>Start execution time</td>
+                    </tr>
+                    <tr>
+                        <td>finishTime</td>
+                        <td>number</td>
+                        <td>Finish time</td>
+                    </tr>
+                    <tr>
+                        <td>imageUrl</td>
+                        <td>string</td>
+                        <td>Image URL</td>
+                    </tr>
+                    <tr>
+                        <td>progress</td>
+                        <td>string</td>
+                        <td>Task progress</td>
+                    </tr>
+                    <tr>
+                        <td>failReason</td>
+                        <td>string</td>
+                        <td>Failure reason</td>
+                    </tr>
+                    <tr>
+                        <td>properties</td>
+                        <td>object</td>
+                        <td>Extended fields</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <h3>SubmitResultVO</h3>
+            <table class="params-table">
+                <thead>
+                    <tr>
+                        <th>Field</th>
+                        <th>Type</th>
+                        <th>Description</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>code</td>
+                        <td>int</td>
+                        <td>Status code: 1 (Success), 21 (Already exists), 22 (Queued), other (Error)</td>
+                    </tr>
+                    <tr>
+                        <td>description</td>
+                        <td>string</td>
+                        <td>Description</td>
+                    </tr>
+                    <tr>
+                        <td>result</td>
+                        <td>string</td>
+                        <td>Task ID</td>
+                    </tr>
+                    <tr>
+                        <td>properties</td>
+                        <td>object</td>
+                        <td>Extended fields</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <h3>DiscordAccount</h3>
+            <table class="params-table">
+                <thead>
+                    <tr>
+                        <th>Field</th>
+                        <th>Type</th>
+                        <th>Description</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>id</td>
+                        <td>string</td>
+                        <td>ID</td>
+                    </tr>
+                    <tr>
+                        <td>guildId</td>
+                        <td>string</td>
+                        <td>Guild ID</td>
+                    </tr>
+                    <tr>
+                        <td>channelId</td>
+                        <td>string</td>
+                        <td>Channel ID</td>
+                    </tr>
+                    <tr>
+                        <td>userToken</td>
+                        <td>string</td>
+                        <td>User Token</td>
+                    </tr>
+                    <tr>
+                        <td>userAgent</td>
+                        <td>string</td>
+                        <td>User UserAgent</td>
+                    </tr>
+                    <tr>
+                        <td>enable</td>
+                        <td>boolean</td>
+                        <td>Is available</td>
+                    </tr>
+                    <tr>
+                        <td>coreSize</td>
+                        <td>int</td>
+                        <td>Concurrency</td>
+                    </tr>
+                    <tr>
+                        <td>queueSize</td>
+                        <td>int</td>
+                        <td>Queue length</td>
+                    </tr>
+                    <tr>
+                        <td>timeoutMinutes</td>
+                        <td>int</td>
+                        <td>Task timeout (minutes)</td>
+                    </tr>
+                </tbody>
+            </table>
+        </section>
+
+        <section id="response-codes">
+            <h2>Response Codes</h2>
+            <div class="response-codes">
+                <div class="response-code">
+                    <div class="code">Code 1</div>
+                    <div class="desc">Success - Task submitted successfully, result contains task ID</div>
+                </div>
+                <div class="response-code">
+                    <div class="code">Code 21</div>
+                    <div class="desc">Already exists - Task already exists (may occur during upscale operations)</div>
+                </div>
+                <div class="response-code">
+                    <div class="code">Code 22</div>
+                    <div class="desc">In queue - Task submitted successfully, waiting in queue</div>
+                </div>
+                <div class="response-code">
+                    <div class="code">Code 23</div>
+                    <div class="desc">Queue rejected - Queue is full, please try again later</div>
+                </div>
+                <div class="response-code">
+                    <div class="code">Code 24</div>
+                    <div class="desc">Banned prompt - Prompt contains sensitive words</div>
+                </div>
+                <div class="response-code">
+                    <div class="code">Code 3</div>
+                    <div class="desc">Not found - Data not found</div>
+                </div>
+                <div class="response-code">
+                    <div class="code">Code 4</div>
+                    <div class="desc">Validation error - Request validation failed</div>
+                </div>
+                <div class="response-code">
+                    <div class="code">Code 9</div>
+                    <div class="desc">System error - Internal server error</div>
+                </div>
+            </div>
+
+            <h3>Response Examples</h3>
+
+            <h4>Success (Code 1)</h4>
+            <div class="code-block">
+                <pre>{
+  "code": 1,
+  "description": "Success",
+  "result": "8498455807619990",
+  "properties": {
+    "discordInstanceId": "1118138338562560102"
+  }
+}</pre>
+            </div>
+
+            <h4>Already Exists (Code 21)</h4>
+            <div class="code-block">
+                <pre>{
+  "code": 21,
+  "description": "任务已存在",
+  "result": "0741798445574458",
+  "properties": {
+    "status": "SUCCESS",
+    "imageUrl": "https://xxxx"
+  }
+}</pre>
+            </div>
+
+            <h4>In Queue (Code 22)</h4>
+            <div class="code-block">
+                <pre>{
+  "code": 22,
+  "description": "排队中，前面还有1个任务",
+  "result": "0741798445574458",
+  "properties": {
+    "numberOfQueues": 1,
+    "discordInstanceId": "1118138338562560102"
+  }
+}</pre>
+            </div>
+
+            <h4>Queue Full (Code 23)</h4>
+            <div class="code-block">
+                <pre>{
+  "code": 23,
+  "description": "队列已满，请稍后尝试",
+  "result": "14001929738841620",
+  "properties": {
+    "discordInstanceId": "1118138338562560102"
+  }
+}</pre>
+            </div>
+
+            <h4>Banned Prompt (Code 24)</h4>
+            <div class="code-block">
+                <pre>{
+  "code": 24,
+  "description": "可能包含敏感词",
+  "properties": {
+    "promptEn": "nude body",
+    "bannedWord": "nude"
+  }
+}</pre>
+            </div>
+        </section>
+    </div>
+
+    <script>
+        const BASE_URL = '/mj';
+
+        async function testEndpoint(event, method, endpoint, hasPathParams = false) {
+            event.preventDefault();
+            const form = event.target;
+            const responseDiv = form.nextElementSibling.nextElementSibling;
+            const loadingDiv = form.nextElementSibling;
+            const submitBtn = form.querySelector('button[type="submit"]');
+
+            // Hide previous response
+            responseDiv.style.display = 'none';
+            responseDiv.className = 'response';
+
+            // Show loading
+            loadingDiv.classList.add('active');
+            submitBtn.disabled = true;
+
+            try {
+                let url = BASE_URL + endpoint;
+                let body = null;
+                const headers = {
+                    'Content-Type': 'application/json'
+                };
+
+                // Check for API secret
+                const apiSecret = localStorage.getItem('apiSecret');
+                if (apiSecret) {
+                    headers['mj-api-secret'] = apiSecret;
+                }
+
+                if (method === 'GET') {
+                    // Handle GET request
+                    if (hasPathParams) {
+                        const idInput = form.querySelector('input[name="id"]');
+                        if (idInput) {
+                            url = url.replace('{id}', idInput.value);
+                        }
+                    }
+                } else {
+                    // Handle POST request
+                    const formData = new FormData(form);
+                    body = {};
+
+                    // Handle special fields
+                    for (let [key, value] of formData.entries()) {
+                        if (key === 'id') {
+                            // Skip id field for POST requests (used in URL for GET)
+                            continue;
+                        }
+                        
+                        // Try to parse JSON fields
+                        if (key === 'base64Array' || key === 'ids') {
+                            try {
+                                body[key] = value ? JSON.parse(value) : [];
+                            } catch (e) {
+                                body[key] = value;
+                            }
+                        } else if (key === 'index') {
+                            body[key] = value ? parseInt(value) : undefined;
+                        } else if (value) {
+                            body[key] = value;
+                        }
+                    }
+
+                    // Remove empty fields
+                    Object.keys(body).forEach(key => {
+                        if (body[key] === '' || body[key] === undefined) {
+                            delete body[key];
+                        }
+                    });
+                }
+
+                const options = {
+                    method: method,
+                    headers: headers
+                };
+
+                if (body) {
+                    options.body = JSON.stringify(body);
+                }
+
+                const response = await fetch(url, options);
+                const data = await response.json();
+
+                // Show response
+                responseDiv.style.display = 'block';
+                if (response.ok) {
+                    responseDiv.className = 'response success';
+                } else {
+                    responseDiv.className = 'response error';
+                }
+
+                responseDiv.innerHTML = `<pre>${JSON.stringify(data, null, 2)}</pre>`;
+
+                // Scroll to response
+                responseDiv.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+            } catch (error) {
+                responseDiv.style.display = 'block';
+                responseDiv.className = 'response error';
+                responseDiv.innerHTML = `<pre>Error: ${error.message}</pre>`;
+            } finally {
+                loadingDiv.classList.remove('active');
+                submitBtn.disabled = false;
+            }
+        }
+
+        // Smooth scroll for navigation links
+        document.querySelectorAll('nav a').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
+            });
+        });
+
+        // API Secret management (optional)
+        window.addEventListener('DOMContentLoaded', function() {
+            const apiSecret = prompt('Enter API Secret (optional, leave empty to skip):');
+            if (apiSecret) {
+                localStorage.setItem('apiSecret', apiSecret);
+            }
+        });
+    </script>
+</body>
+</html>
+
