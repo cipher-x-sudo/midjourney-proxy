@@ -51,31 +51,83 @@ Proxy the Discord channel for MidJourney to enable API-based calls for AI drawin
 
 ## Quick Start
 
-1. `Railway`: Based on the Railway platform, no need for your own server: [Deployment method](./docs/railway-start.md) ;
-   If Railway is not available, you can start using Zeabur instead.
+### Using Docker (Recommended)
+
+```bash
+# Build the image
+docker build -t midjourney-proxy .
+
+# Run with docker-compose (includes Redis)
+docker-compose up -d
+
+# Or run directly
+docker run -p 8080:8080 \
+  -e MJ_DISCORD_GUILD_ID=your_guild_id \
+  -e MJ_DISCORD_CHANNEL_ID=your_channel_id \
+  -e MJ_DISCORD_USER_TOKEN=your_token \
+  midjourney-proxy
+```
+
+### Using Node.js directly
+
+```bash
+# Install dependencies
+npm install
+
+# Configure your Discord credentials in src/config/default.yaml
+# Or use environment variables:
+# MJ_DISCORD_GUILD_ID, MJ_DISCORD_CHANNEL_ID, MJ_DISCORD_USER_TOKEN
+
+# Build and start
+npm run build
+npm start
+```
+
+### Cloud Platforms
+
+1. `Railway`: Based on the Railway platform, no need for your own server: [Deployment method](./docs/railway-start.md)
 2. `Zeabur`: Based on the Zeabur platform, no need for your own server: [Deployment method](./docs/zeabur-start.md)
-3. `Docker`: Start using Docker on a server or locally: [Deployment method](./docs/docker-start.md)
 
 ## Local development
 
-- Depends on Java 17 and Maven
-- Change configuration items: Edit src/main/resources/application.yml
-- Project execution: Start the main function of ProxyApplication
-- After changing the code, build the image: Uncomment VOLUME in the Dockerfile, then
-  execute `docker build . -t midjourney-proxy`
+- Requires Node.js 18+ and npm 9+
+- Install dependencies: `npm install`
+- Change configuration items: Edit `src/config/default.yaml` or use environment variables
+- Development mode: `npm run dev` (runs with hot reload)
+- Build project: `npm run build`
+- Start production server: `npm start`
+- Docker build: `docker build -t midjourney-proxy .`
 
 ## Configuration items
 
-- mj.accounts: Refer
-  to [Account pool configuration](./docs/config.md#%E8%B4%A6%E5%8F%B7%E6%B1%A0%E9%85%8D%E7%BD%AE%E5%8F%82%E8%80%83)
-- mj.task-store.type: Task storage method, default is in_memory (in memory, lost after restart), Redis is an alternative
-  option.
-- mj.task-store.timeout: Task storage expiration time, tasks are deleted after expiration, default is 30 days.
-- mj.api-secret: API key, if left empty, authentication is not enabled; when calling the API, you need to add the
-  request header 'mj-api-secret'.
-- mj.translate-way: The method for translating Chinese prompts into English, options include null (default), Baidu, or
-  GPT.
-- For more configuration options, see [Configuration items](./docs/config.md)
+Configuration can be done via `src/config/default.yaml` or environment variables:
+
+### Key Configuration Options
+
+- **mj.discord.guildId**: Discord server (guild) ID
+- **mj.discord.channelId**: Discord channel ID
+- **mj.discord.userToken**: Discord user token
+- **mj.accounts**: Account pool configuration (array of Discord accounts)
+- **mj.taskStore.type**: Task storage method (`in_memory` or `redis`), default is `in_memory`
+- **mj.taskStore.timeout**: Task storage expiration time (e.g., `30d`), default is 30 days
+- **mj.apiSecret**: API key for authentication (optional). If set, include header `mj-api-secret` in API requests
+- **mj.translateWay**: Translation method for Chinese prompts (`NULL`, `BAIDU`, or `GPT`), default is `NULL`
+- **mj.server.port**: Server port (default: 8080)
+- **mj.server.contextPath**: API context path (default: `/mj`)
+
+### Environment Variables
+
+You can override configuration using environment variables:
+- `MJ_DISCORD_GUILD_ID`: Discord guild ID
+- `MJ_DISCORD_CHANNEL_ID`: Discord channel ID
+- `MJ_DISCORD_USER_TOKEN`: Discord user token
+- `MJ_API_SECRET`: API secret key
+- `MJ_TASK_STORE_TYPE`: Task store type (`in_memory` or `redis`)
+- `MJ_TRANSLATE_WAY`: Translation method (`NULL`, `BAIDU`, `GPT`)
+- `PORT`: Server port
+- `REDIS_URL`: Redis connection URL (if using Redis)
+
+For more configuration options, see the `src/config/default.yaml` file.
 
 ## Related documentation
 

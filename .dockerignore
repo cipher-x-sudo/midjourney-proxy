@@ -1,22 +1,22 @@
-target/
-
-### IntelliJ IDEA ###
-.idea
-*.iws
-*.iml
-*.ipr
-
-### VS Code ###
-.vscode/
-
-### Macos ###
-.DS_Store
-
-### application config #
-config/application.yml
-
+node_modules
+npm-debug.log
+dist
 .git
 .gitignore
-docker
+.env
+.env.local
+*.md
 docs
-README_US.md
+.vscode
+.idea
+*.log
+coverage
+.nyc_output
+tmp
+temp
+src/main
+pom.xml
+target
+*.jar
+Dockerfile.dev
+docker-compose.yml

@@ -1,8 +1,0 @@
-server:
-  port: 8080
-  servlet:
-    context-path: /mj
-logging:
-  level:
-    ROOT: info
-    com.github.novicezk.midjourney: debug

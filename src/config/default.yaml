@@ -1,0 +1,46 @@
+server:
+  port: 8080
+  contextPath: /mj
+
+logging:
+  level: info
+
+mj:
+  taskStore:
+    type: in_memory
+    timeout: 30d
+  accountChooseRule: BestWaitIdleRule
+  discord:
+    guildId: 
+    channelId: 
+    userToken: 
+    userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/112.0.0.0 Safari/537.36"
+    enable: true
+    coreSize: 3
+    queueSize: 10
+    timeoutMinutes: 5
+  accounts: []
+  proxy:
+    host: 
+    port: 
+  ngDiscord:
+    server: 
+    cdn: 
+    wss: 
+    resumeWss: 
+    uploadServer: 
+  baiduTranslate:
+    appid: 
+    appSecret: 
+  openai:
+    gptApiUrl: 
+    gptApiKey: 
+    timeout: 30s
+    model: gpt-3.5-turbo
+    maxTokens: 2048
+    temperature: 0
+  translateWay: null
+  apiSecret: 
+  notifyHook: 
+  notifyPoolSize: 10
+

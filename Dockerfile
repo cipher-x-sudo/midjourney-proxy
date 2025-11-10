@@ -1,33 +1,56 @@
-FROM maven:3.8.5-openjdk-17
+# Stage 1: Build
+FROM node:18-alpine AS builder
+WORKDIR /app
 
-ARG user=spring
-ARG group=spring
+# Copy package files
+COPY package*.json ./
+COPY tsconfig.json ./
 
-ENV SPRING_HOME=/home/spring
+# Install dependencies
+RUN npm ci
 
-RUN groupadd -g 1000 ${group} \
-	&& useradd -d "$SPRING_HOME" -u 1000 -g 1000 -m -s /bin/bash ${user} \
-	&& mkdir -p $SPRING_HOME/config \
-	&& mkdir -p $SPRING_HOME/logs \
-	&& chown -R ${user}:${group} $SPRING_HOME/config $SPRING_HOME/logs
+# Copy source code
+COPY src/ ./src/
+COPY public/ ./public/
 
-# Railway 不支持使用 VOLUME, 本地需要构建时，取消下一行的注释
-# VOLUME ["$SPRING_HOME/config", "$SPRING_HOME/logs"]
+# Build TypeScript
+RUN npm run build
 
-USER ${user}
-WORKDIR $SPRING_HOME
+# Stage 2: Production
+FROM node:18-alpine AS production
+WORKDIR /app
 
-COPY . .
+# Create non-root user
+RUN addgroup -g 1000 -S nodejs && \
+    adduser -S nodejs -u 1000
 
-RUN mvn clean package \
-    && mv target/midjourney-proxy-*.jar ./app.jar \
-    && rm -rf target
+# Copy package files
+COPY package*.json ./
 
+# Install production dependencies only
+RUN npm ci --only=production && \
+    npm cache clean --force
+
+# Copy built application from builder
+COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/public ./public
+
+# Copy configuration files
+COPY src/config/ ./src/config/
+COPY src/resources/ ./src/resources/
+
+# Set ownership
+RUN chown -R nodejs:nodejs /app
+
+# Switch to non-root user
+USER nodejs
+
+# Expose port
 EXPOSE 8080
 
-ENV JAVA_OPTS -XX:MaxRAMPercentage=85 -Djava.awt.headless=true -XX:+HeapDumpOnOutOfMemoryError \
- -XX:MaxGCPauseMillis=20 -XX:InitiatingHeapOccupancyPercent=35 -Xlog:gc:file=/home/spring/logs/gc.log \
- -Dlogging.file.path=/home/spring/logs \
- -Dserver.port=8080 -Duser.timezone=Asia/Shanghai
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+  CMD node -e "require('http').get('http://localhost:8080/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"
 
-ENTRYPOINT ["bash","-c","java $JAVA_OPTS -jar app.jar"]
+# Start application
+CMD ["node", "dist/server.js"]
