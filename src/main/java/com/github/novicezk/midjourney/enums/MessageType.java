@@ -3,15 +3,15 @@ package com.github.novicezk.midjourney.enums;
 
 public enum MessageType {
 	/**
-	 * 创建.
+	 * Create.
 	 */
 	CREATE,
 	/**
-	 * 修改.
+	 * Update.
 	 */
 	UPDATE,
 	/**
-	 * 删除.
+	 * Delete.
 	 */
 	DELETE;
 

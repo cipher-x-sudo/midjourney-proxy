@@ -3,27 +3,27 @@ package com.github.novicezk.midjourney.enums;
 
 public enum TaskAction {
 	/**
-	 * 生成图片.
+	 * Generate image.
 	 */
 	IMAGINE,
 	/**
-	 * 选中放大.
+	 * Upscale selected.
 	 */
 	UPSCALE,
 	/**
-	 * 选中其中的一张图，生成四张相似的.
+	 * Select one image and generate four similar variations.
 	 */
 	VARIATION,
 	/**
-	 * 重新执行.
+	 * Reroll.
 	 */
 	REROLL,
 	/**
-	 * 图转prompt.
+	 * Image to prompt.
 	 */
 	DESCRIBE,
 	/**
-	 * 多图混合.
+	 * Blend multiple images.
 	 */
 	BLEND
 

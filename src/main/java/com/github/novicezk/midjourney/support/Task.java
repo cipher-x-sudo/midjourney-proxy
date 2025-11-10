@@ -12,39 +12,39 @@ import java.io.Serial;
 
 @Data
 @EqualsAndHashCode(callSuper = true)
-@ApiModel("任务")
+@ApiModel("Task")
 public class Task extends DomainObject {
 	@Serial
 	private static final long serialVersionUID = -674915748204390789L;
 
-	@ApiModelProperty("任务类型")
+	@ApiModelProperty("Task type")
 	private TaskAction action;
-	@ApiModelProperty("任务状态")
+	@ApiModelProperty("Task status")
 	private TaskStatus status = TaskStatus.NOT_START;
 
-	@ApiModelProperty("提示词")
+	@ApiModelProperty("Prompt")
 	private String prompt;
-	@ApiModelProperty("提示词-英文")
+	@ApiModelProperty("Prompt - English")
 	private String promptEn;
 
-	@ApiModelProperty("任务描述")
+	@ApiModelProperty("Task description")
 	private String description;
-	@ApiModelProperty("自定义参数")
+	@ApiModelProperty("Custom parameters")
 	private String state;
 
-	@ApiModelProperty("提交时间")
+	@ApiModelProperty("Submit time")
 	private Long submitTime;
-	@ApiModelProperty("开始执行时间")
+	@ApiModelProperty("Start execution time")
 	private Long startTime;
-	@ApiModelProperty("结束时间")
+	@ApiModelProperty("Finish time")
 	private Long finishTime;
 
-	@ApiModelProperty("图片url")
+	@ApiModelProperty("Image URL")
 	private String imageUrl;
 
-	@ApiModelProperty("任务进度")
+	@ApiModelProperty("Task progress")
 	private String progress;
-	@ApiModelProperty("失败原因")
+	@ApiModelProperty("Failure reason")
 	private String failReason;
 
 	public void start() {

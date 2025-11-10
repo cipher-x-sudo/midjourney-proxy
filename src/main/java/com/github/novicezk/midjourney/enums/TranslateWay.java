@@ -3,15 +3,15 @@ package com.github.novicezk.midjourney.enums;
 
 public enum TranslateWay {
 	/**
-	 * 百度翻译.
+	 * Baidu Translate.
 	 */
 	BAIDU,
 	/**
-	 * GPT翻译.
+	 * GPT Translate.
 	 */
 	GPT,
 	/**
-	 * 不翻译.
+	 * No translation.
 	 */
 	NULL
 
