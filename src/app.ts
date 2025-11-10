@@ -86,13 +86,17 @@ export async function createApp(): Promise<FastifyInstance> {
   const taskTimeoutSchedule = new TaskTimeoutSchedule(discordLoadBalancer);
   taskTimeoutSchedule.start();
 
-  // Health check endpoint
+  // API routes with authentication
+  const apiPrefix = config.server.contextPath || '/mj';
+
+  // Health check endpoint (both at root and context path for compatibility)
   app.get('/health', async (request, reply) => {
     return { status: 'ok' };
   });
-
-  // API routes with authentication
-  const apiPrefix = config.server.contextPath || '/mj';
+  
+  app.get(`${apiPrefix}/health`, async (request, reply) => {
+    return { status: 'ok' };
+  });
 
   // Submit routes
   app.post(`${apiPrefix}/submit/imagine`, {
