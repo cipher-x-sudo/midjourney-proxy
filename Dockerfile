@@ -16,7 +16,7 @@ COPY public/ ./public/
 # Build TypeScript
 RUN npm run build
 
-# Stage 2: Production
+# Stage 2: 
 FROM node:18-alpine AS production
 WORKDIR /app
 
