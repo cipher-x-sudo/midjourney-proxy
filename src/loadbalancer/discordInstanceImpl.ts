@@ -15,7 +15,6 @@ import { UserMessageListener } from '../wss/userMessageListener';
 import { DiscordHelper } from '../support/discordHelper';
 import { TaskCondition } from '../support/taskCondition';
 import { TASK_PROPERTY_DISCORD_INSTANCE_ID, TASK_PROPERTY_NONCE } from '../constants';
-import pLimit from 'p-limit';
 import * as crypto from 'crypto';
 
 /**
@@ -27,7 +26,7 @@ export class DiscordInstanceImpl implements DiscordInstance {
   private service: DiscordService;
   private taskStoreService: TaskStoreService;
   private notifyService: NotifyService;
-  private taskQueueLimit: ReturnType<typeof pLimit>;
+  private taskQueueLimit: (fn: () => Promise<void>) => Promise<void>;
   private runningTasks: Task[] = [];
   private queueTasks: Task[] = [];
   private taskFutureMap: Map<string, Promise<any>> = new Map();
@@ -46,9 +45,45 @@ export class DiscordInstanceImpl implements DiscordInstance {
     this.notifyService = notifyService;
     this.gateway = gateway;
 
-    // Create task queue with concurrency limit using p-limit
+    // Create task queue with concurrency limit
     const concurrency = account.coreSize || 3;
-    this.taskQueueLimit = pLimit(concurrency);
+    this.taskQueueLimit = this.createConcurrencyLimiter(concurrency);
+  }
+
+  /**
+   * Create a concurrency limiter function
+   */
+  private createConcurrencyLimiter(concurrency: number): (fn: () => Promise<void>) => Promise<void> {
+    let running = 0;
+    const queue: Array<{ fn: () => Promise<void>; resolve: () => void; reject: (error: any) => void }> = [];
+
+    const processQueue = (): void => {
+      if (running >= concurrency || queue.length === 0) {
+        return;
+      }
+
+      running++;
+      const item = queue.shift()!;
+
+      item.fn()
+        .then(() => {
+          item.resolve();
+        })
+        .catch((error) => {
+          item.reject(error);
+        })
+        .finally(() => {
+          running--;
+          processQueue();
+        });
+    };
+
+    return (fn: () => Promise<void>): Promise<void> => {
+      return new Promise<void>((resolve, reject) => {
+        queue.push({ fn, resolve, reject });
+        processQueue();
+      });
+    };
   }
 
   getInstanceId(): string {
