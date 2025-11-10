@@ -15,7 +15,7 @@ import { UserMessageListener } from '../wss/userMessageListener';
 import { DiscordHelper } from '../support/discordHelper';
 import { TaskCondition } from '../support/taskCondition';
 import { TASK_PROPERTY_DISCORD_INSTANCE_ID, TASK_PROPERTY_NONCE } from '../constants';
-import PQueue from 'p-queue';
+import pLimit from 'p-limit';
 import * as crypto from 'crypto';
 
 /**
@@ -27,7 +27,7 @@ export class DiscordInstanceImpl implements DiscordInstance {
   private service: DiscordService;
   private taskStoreService: TaskStoreService;
   private notifyService: NotifyService;
-  private taskQueue: PQueue;
+  private taskQueueLimit: ReturnType<typeof pLimit>;
   private runningTasks: Task[] = [];
   private queueTasks: Task[] = [];
   private taskFutureMap: Map<string, Promise<any>> = new Map();
@@ -46,10 +46,9 @@ export class DiscordInstanceImpl implements DiscordInstance {
     this.notifyService = notifyService;
     this.gateway = gateway;
 
-    // Create task queue with concurrency limit
-    this.taskQueue = new PQueue({
-      concurrency: account.coreSize || 3,
-    });
+    // Create task queue with concurrency limit using p-limit
+    const concurrency = account.coreSize || 3;
+    this.taskQueueLimit = pLimit(concurrency);
   }
 
   getInstanceId(): string {
@@ -119,8 +118,8 @@ export class DiscordInstanceImpl implements DiscordInstance {
       // Add to queue
       this.queueTasks.push(task);
 
-      // Submit to queue
-      const promise = this.taskQueue.add(() => this.executeTask(task, discordSubmit));
+      // Submit to queue using p-limit
+      const promise = this.taskQueueLimit(() => this.executeTask(task, discordSubmit));
       this.taskFutureMap.set(task.id!, promise);
 
       if (currentWaitNumbers === 0) {
