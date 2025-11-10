@@ -14,21 +14,21 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
-@Api(tags = "账号查询")
+@Api(tags = "Account Query")
 @RestController
 @RequestMapping("/account")
 @RequiredArgsConstructor
 public class AccountController {
 	private final DiscordLoadBalancer loadBalancer;
 
-	@ApiOperation(value = "指定ID获取账号")
+	@ApiOperation(value = "Get Account by ID")
 	@GetMapping("/{id}/fetch")
-	public DiscordAccount fetch(@ApiParam(value = "账号ID") @PathVariable String id) {
+	public DiscordAccount fetch(@ApiParam(value = "Account ID") @PathVariable String id) {
 		DiscordInstance instance = this.loadBalancer.getDiscordInstance(id);
 		return instance == null ? null : instance.account();
 	}
 
-	@ApiOperation(value = "查询所有账号")
+	@ApiOperation(value = "Query All Accounts")
 	@GetMapping("/list")
 	public List<DiscordAccount> list() {
 		return this.loadBalancer.getAllInstances().stream().map(DiscordInstance::account).toList();

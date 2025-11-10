@@ -6,10 +6,10 @@ import lombok.Data;
 import lombok.EqualsAndHashCode;
 
 @Data
-@ApiModel("Describe提交参数")
+@ApiModel("Describe Submission Parameters")
 @EqualsAndHashCode(callSuper = true)
 public class SubmitDescribeDTO extends BaseSubmitDTO {
 
-	@ApiModelProperty(value = "图片base64", required = true, example = "data:image/png;base64,xxx")
+	@ApiModelProperty(value = "Image base64", required = true, example = "data:image/png;base64,xxx")
 	private String base64;
 }

@@ -6,7 +6,7 @@ import lombok.Data;
 import java.util.List;
 
 @Data
-@ApiModel("任务查询参数")
+@ApiModel("Task Query Parameters")
 public class TaskConditionDTO {
 
 	private List<String> ids;

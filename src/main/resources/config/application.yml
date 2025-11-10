@@ -9,8 +9,8 @@ logging:
 knife4j:
   enable: true
   openapi:
-    title: Midjourney Proxy API文档
-    description: 代理 MidJourney 的discord频道，实现api形式调用AI绘图
+    title: Midjourney Proxy API Documentation
+    description: Proxy MidJourney's Discord channel to enable API-based AI image generation
     concat: novicezk
     url: https://github.com/novicezk/midjourney-proxy
     version: v2.6.3
