@@ -47,13 +47,13 @@ PORT=8080
 |----------|-------------|----------|---------|
 | `MJ_DISCORD_GUILD_ID` | Discord server (guild) ID | ✅ Yes | `123456789012345678` |
 | `MJ_DISCORD_CHANNEL_ID` | Discord channel ID | ✅ Yes | `123456789012345678` |
-| `MJ_DISCORD_USER_TOKEN` | Discord user token | ✅ Yes | `MTQyMDY2ODE2NTMz...` |
+| `MJ_DISCORD_USER_TOKEN` | Discord user token | ✅ Yes | `your_discord_token` |
 
 ### API Security
 
 | Variable | Description | Required | Example |
 |----------|-------------|----------|---------|
-| `MJ_API_SECRET` | API secret for authentication | ⚠️ Recommended | `4752204de413f152bc48768...` |
+| `MJ_API_SECRET` | API secret for authentication | ⚠️ Recommended | `your-generated-api-secret` |
 
 ### Task Store Configuration
 
@@ -176,10 +176,10 @@ You can also set non-sensitive variables in `railway.json`:
 ### 1. Basic Setup (Minimum Required)
 
 ```bash
-MJ_DISCORD_GUILD_ID=1437559475199414376
-MJ_DISCORD_CHANNEL_ID=1437559475883217048
-MJ_DISCORD_USER_TOKEN=MTQyMDY2ODE2NTMzOTQ4MDE0Ng.GVICTN.rZ8EnPQpMEoN93kDQ_1M7Bf03GLG4th4ka6YI0
-MJ_API_SECRET=4752204de413f152bc48768ccc1f155288fb6ff7e18e18d7b168757121847340
+MJ_DISCORD_GUILD_ID=your_guild_id
+MJ_DISCORD_CHANNEL_ID=your_channel_id
+MJ_DISCORD_USER_TOKEN=your_discord_token
+MJ_API_SECRET=your-generated-api-secret
 ```
 
 ### 2. Production Setup (With Redis)

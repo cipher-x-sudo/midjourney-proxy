@@ -107,7 +107,7 @@ This will test the server connection and health endpoint.
 
 3. **Add Each Variable:**
    - Variable name: `MJ_DISCORD_GUILD_ID`
-   - Value: `1437559475199414376`
+   - Value: `your_guild_id`
    - Click **Add**
    - Repeat for all variables
 
