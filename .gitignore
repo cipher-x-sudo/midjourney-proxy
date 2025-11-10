@@ -16,7 +16,8 @@ build/
 .env.local
 .env.*.local
 
-# Configuration files with secrets (optional - uncomment if you store secrets in config)
+# Configuration files with secrets - DO NOT COMMIT SECRETS
+# Uncomment the line below if you store secrets in default.yaml
 # src/config/default.yaml
 
 # IDE
