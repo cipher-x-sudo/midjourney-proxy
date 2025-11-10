@@ -97,39 +97,39 @@ export class DiscordGateway {
         'Accept-Language': 'zh-CN,zh;q=0.9',
         'Cache-Control': 'no-cache',
         'Pragma': 'no-cache',
-        'Sec-WebSocket-Extensions': 'permessage-deflate; client_max_window_bits',
+        // DO NOT include Sec-WebSocket-Extensions - Discord uses application-level zlib-stream,
+        // not WebSocket-level permessage-deflate. They conflict with each other.
         'User-Agent': this.account.userAgent || '',
       };
 
-      this.ws = new WebSocket(gatewayUrl, { headers });
-
       // Reset buffer for new connection
       this.inflateBuffer = Buffer.alloc(0);
-      this.decompressor = null;
+      
+      // Initialize zlib decompressor BEFORE creating WebSocket
+      // This ensures it's ready before any data can arrive
+      this.decompressor = zlib.createInflateRaw({
+        chunkSize: 1024 * 16, // 16KB chunks
+        flush: zlib.constants.Z_SYNC_FLUSH,
+      });
+
+      this.decompressor.on('data', (chunk: Buffer) => {
+        this.inflateBuffer = Buffer.concat([this.inflateBuffer, chunk]);
+        // Try to parse complete JSON messages
+        this.processInflateBuffer();
+      });
+
+      this.decompressor.on('error', (error: Error) => {
+        console.error(`[wss-${this.account.getDisplay()}] Decompressor error:`, error);
+        // Decompressor error means the stream is corrupted - cannot recover mid-stream
+        // Close the connection and trigger reconnect
+        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+          this.ws.close(DiscordGateway.CLOSE_CODE_EXCEPTION, 'decompressor error');
+        }
+      });
+
+      this.ws = new WebSocket(gatewayUrl, { headers });
 
       this.ws.on('open', () => {
-        // Initialize zlib decompressor for zlib-stream after WebSocket is open
-        // This ensures the decompressor is ready before any data arrives
-        this.decompressor = zlib.createInflateRaw({
-          chunkSize: 1024 * 16, // 16KB chunks
-          flush: zlib.constants.Z_SYNC_FLUSH,
-        });
-
-        this.decompressor.on('data', (chunk: Buffer) => {
-          this.inflateBuffer = Buffer.concat([this.inflateBuffer, chunk]);
-          // Try to parse complete JSON messages
-          this.processInflateBuffer();
-        });
-
-        this.decompressor.on('error', (error: Error) => {
-          console.error(`[wss-${this.account.getDisplay()}] Decompressor error:`, error);
-          // Decompressor error means the stream is corrupted - cannot recover mid-stream
-          // Close the connection and trigger reconnect
-          if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-            this.ws.close(DiscordGateway.CLOSE_CODE_EXCEPTION, 'decompressor error');
-          }
-        });
-
         // Connection opened - resolve immediately
         // The actual connection success is signaled by onSuccess() when READY/RESUMED is received
         resolve();
@@ -147,6 +147,16 @@ export class DiscordGateway {
 
       this.ws.on('error', (error: Error) => {
         console.error(`[wss-${this.account.getDisplay()}] WebSocket error:`, error);
+        // Clean up decompressor if WebSocket creation fails
+        if (this.decompressor) {
+          try {
+            this.decompressor.removeAllListeners();
+            this.decompressor.destroy();
+          } catch (e) {
+            // Ignore cleanup errors
+          }
+          this.decompressor = null;
+        }
         this.onFailure(DiscordGateway.CLOSE_CODE_EXCEPTION, error.message || 'transport error');
         reject(error);
       });
@@ -537,12 +547,12 @@ export class DiscordGateway {
     // Then cleanup decompressor (after WebSocket is closed to prevent new data)
     if (this.decompressor) {
       try {
-        // Remove all event listeners first
+        // Remove all event listeners first to prevent new events
         this.decompressor.removeAllListeners();
-        // End the stream gracefully
-        this.decompressor.end();
+        // Destroy the stream to fully clean up internal state
+        this.decompressor.destroy();
       } catch (error) {
-        // Ignore cleanup errors - decompressor may already be closed
+        // Ignore cleanup errors - decompressor may already be destroyed
       }
       this.decompressor = null;
     }
