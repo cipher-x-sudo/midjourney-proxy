@@ -266,9 +266,9 @@ async function initializeAccounts(
         console.error(`[${account.getDisplay()}] WebSocket start error:`, error);
       });
       
-      // Wait for WebSocket connection (with timeout)
+      // Wait for WebSocket connection (with timeout - increased for decompressor initialization)
       try {
-        const lock = await waitForLock(`wss:${account.id}`, 10000);
+        const lock = await waitForLock(`wss:${account.id}`, 30000); // 30 seconds timeout
         const code = lock.getProperty('code') || 0;
         if (code !== ReturnCode.SUCCESS) {
           const description = lock.getProperty('description') || '';

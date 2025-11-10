@@ -11,9 +11,9 @@ mj:
     timeout: 30d
   accountChooseRule: BestWaitIdleRule
   discord:
-    guildId: 
-    channelId: 
-    userToken: 
+    guildId: "1437559475199414376"
+    channelId: "1437559475883217048"
+    userToken: "MTQyMDY2ODE2NTMzOTQ4MDE0Ng.GVICTN.rZ8EnPQpMEoN93kDQ_1M7Bf03GLG4th4ka6YI0"
     userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/112.0.0.0 Safari/537.36"
     enable: true
     coreSize: 3
@@ -40,7 +40,7 @@ mj:
     maxTokens: 2048
     temperature: 0
   translateWay: null
-  apiSecret: 
+  apiSecret: "4752204de413f152bc48768ccc1f155288fb6ff7e18e18d7b168757121847340"
   notifyHook: 
   notifyPoolSize: 10
 

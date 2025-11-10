@@ -85,6 +85,10 @@ export class DiscordGateway {
    */
   async start(reconnect: boolean = false): Promise<void> {
     this.sessionClosing = false;
+    
+    // Clean up previous connection
+    this.closeSocket();
+    
     const gatewayUrl = this.getGatewayUrl(reconnect);
     
     return new Promise((resolve, reject) => {
@@ -99,8 +103,11 @@ export class DiscordGateway {
 
       this.ws = new WebSocket(gatewayUrl, { headers });
 
-      // Initialize zlib decompressor for zlib-stream
-      this.decompressor = zlib.createInflateRaw();
+      // Initialize zlib decompressor for zlib-stream (must be fresh for each connection)
+      this.decompressor = zlib.createInflateRaw({
+        chunkSize: 1024 * 16, // 16KB chunks
+        flush: zlib.constants.Z_SYNC_FLUSH,
+      });
       this.inflateBuffer = Buffer.alloc(0);
 
       this.decompressor.on('data', (chunk: Buffer) => {
@@ -111,13 +118,32 @@ export class DiscordGateway {
 
       this.decompressor.on('error', (error: Error) => {
         console.error(`[wss-${this.account.getDisplay()}] Decompressor error:`, error);
+        // Reset decompressor on error
+        if (this.decompressor) {
+          try {
+            this.decompressor.removeAllListeners();
+            this.decompressor.end();
+          } catch (e) {
+            // Ignore cleanup errors
+          }
+          this.decompressor = null;
+        }
+        // Try to recreate decompressor
+        this.decompressor = zlib.createInflateRaw({
+          chunkSize: 1024 * 16,
+          flush: zlib.constants.Z_SYNC_FLUSH,
+        });
+        this.inflateBuffer = Buffer.alloc(0);
+        this.decompressor.on('data', (chunk: Buffer) => {
+          this.inflateBuffer = Buffer.concat([this.inflateBuffer, chunk]);
+          this.processInflateBuffer();
+        });
       });
 
       this.ws.on('open', () => {
-        // Wait 1 second after connection
-        setTimeout(() => {
-          resolve();
-        }, 1000);
+        // Connection opened - resolve immediately
+        // The actual connection success is signaled by onSuccess() when READY/RESUMED is received
+        resolve();
       });
 
       this.ws.on('message', (data: WebSocket.Data) => {
@@ -495,8 +521,9 @@ export class DiscordGateway {
 
     if (this.ws) {
       try {
-        if (this.ws.readyState === WebSocket.OPEN) {
+        if (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING) {
           this.sessionClosing = true;
+          this.ws.removeAllListeners();
           this.ws.close();
         }
       } catch (error) {
@@ -506,9 +533,17 @@ export class DiscordGateway {
     }
 
     if (this.decompressor) {
-      this.decompressor.end();
+      try {
+        this.decompressor.removeAllListeners();
+        this.decompressor.end();
+      } catch (error) {
+        // Ignore cleanup errors
+      }
       this.decompressor = null;
     }
+    
+    // Reset buffer
+    this.inflateBuffer = Buffer.alloc(0);
   }
 
   /**
