@@ -10,7 +10,6 @@ knife4j:
   enable: true
   setting:
     language: en-US
-    enableLanguage: false
   openapi:
     title: Midjourney Proxy API Documentation
     description: Proxy MidJourney's Discord channel to enable API-based AI image generation
