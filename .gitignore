@@ -18,6 +18,7 @@ build/
 
 # Configuration files with secrets - DO NOT COMMIT SECRETS
 # Uncomment the line below if you store secrets in default.yaml
+# Note: Keep default.yaml in git for structure, but use environment variables for secrets
 # src/config/default.yaml
 
 # IDE
