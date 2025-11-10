@@ -31,9 +31,11 @@ RUN npm ci --omit=dev && \
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/public ./public
 
-# Copy configuration files
+# Copy configuration and resource files from source (available in build context)
 COPY src/config/ ./src/config/
 COPY src/resources/ ./src/resources/
+# Also copy resources to root level for easier access
+COPY src/resources/ ./resources/
 
 # Set ownership to node user (node:18-alpine base image includes node user with UID 1000)
 # Must be done as root before switching users

@@ -10,9 +10,18 @@ let MIME_TYPE_MAP: Map<string, string[]> = new Map();
  * Initialize MIME type map from file
  */
 function initMimeTypeMap(): void {
-  const mimeTypesFilePath = path.join(__dirname, '../../resources/mime.types');
+  // Try multiple possible locations (in order of preference)
+  const possiblePaths = [
+    path.join(process.cwd(), 'resources/mime.types'), // Docker: /app/resources/
+    path.join(process.cwd(), 'src/resources/mime.types'), // Docker: /app/src/resources/
+    path.join(__dirname, '../../src/resources/mime.types'), // Compiled: dist/utils/ -> src/resources/
+    path.join(__dirname, '../../resources/mime.types'), // Compiled: dist/utils/ -> resources/
+  ];
+  
+  const mimeTypesFilePath = possiblePaths.find(p => fs.existsSync(p));
+  
   try {
-    if (fs.existsSync(mimeTypesFilePath)) {
+    if (mimeTypesFilePath && fs.existsSync(mimeTypesFilePath)) {
       const content = fs.readFileSync(mimeTypesFilePath, 'utf-8');
       const lines = content.split('\n');
       for (const line of lines) {
@@ -28,7 +37,7 @@ function initMimeTypeMap(): void {
         }
       }
     } else {
-      console.warn(`MIME types file not found: ${mimeTypesFilePath}`);
+      console.warn(`MIME types file not found. Tried: ${possiblePaths.join(', ')}`);
       // Use mime-types package as fallback
       const mimeTypes = require('mime-types');
       // Initialize with common types

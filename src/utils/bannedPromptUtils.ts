@@ -11,20 +11,21 @@ let BANNED_WORDS: string[] = [];
  * Initialize banned words from file
  */
 function initBannedWords(): void {
-  const bannedWordsFilePath = process.env.BANNED_WORDS_FILE || '/home/spring/config/banned-words.txt';
+  const bannedWordsFilePath = process.env.BANNED_WORDS_FILE;
   let filePath: string;
 
-  if (fs.existsSync(bannedWordsFilePath)) {
+  if (bannedWordsFilePath && fs.existsSync(bannedWordsFilePath)) {
     filePath = bannedWordsFilePath;
   } else {
-    // Try resource file
-    const resourcePath = path.join(__dirname, '../../resources/banned-words.txt');
-    if (fs.existsSync(resourcePath)) {
-      filePath = resourcePath;
-    } else {
-      // Fallback to default location
-      filePath = path.join(__dirname, '../../resources/banned-words.txt');
-    }
+    // Try multiple possible locations (in order of preference)
+    const possiblePaths = [
+      path.join(process.cwd(), 'resources/banned-words.txt'), // Docker: /app/resources/
+      path.join(process.cwd(), 'src/resources/banned-words.txt'), // Docker: /app/src/resources/
+      path.join(__dirname, '../../src/resources/banned-words.txt'), // Compiled: dist/utils/ -> src/resources/
+      path.join(__dirname, '../../resources/banned-words.txt'), // Compiled: dist/utils/ -> resources/
+    ];
+    
+    filePath = possiblePaths.find(p => fs.existsSync(p)) || possiblePaths[0];
   }
 
   try {
