@@ -16,7 +16,7 @@ COPY public/ ./public/
 # Build TypeScript
 RUN npm run build
 
-# Stage 2: 
+# Stage 2: Production
 FROM node:18-alpine AS production
 WORKDIR /app
 
@@ -24,7 +24,7 @@ WORKDIR /app
 COPY package*.json ./
 
 # Install production dependencies only (as root)
-RUN npm ci --only=production && \
+RUN npm ci --omit=dev && \
     npm cache clean --force
 
 # Copy built application from builder
