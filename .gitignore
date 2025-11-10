@@ -16,6 +16,9 @@ build/
 .env.local
 .env.*.local
 
+# Configuration files with secrets (optional - uncomment if you store secrets in config)
+# src/config/default.yaml
+
 # IDE
 .vscode/
 .idea/
