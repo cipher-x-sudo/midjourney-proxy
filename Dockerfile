@@ -20,14 +20,10 @@ RUN npm run build
 FROM node:18-alpine AS production
 WORKDIR /app
 
-# Create non-root user
-RUN addgroup -g 1000 -S nodejs && \
-    adduser -S nodejs -u 1000
-
 # Copy package files
 COPY package*.json ./
 
-# Install production dependencies only
+# Install production dependencies only (as root)
 RUN npm ci --only=production && \
     npm cache clean --force
 
@@ -39,11 +35,12 @@ COPY --from=builder /app/public ./public
 COPY src/config/ ./src/config/
 COPY src/resources/ ./src/resources/
 
-# Set ownership
-RUN chown -R nodejs:nodejs /app
+# Set ownership to node user (node:18-alpine base image includes node user with UID 1000)
+# Must be done as root before switching users
+RUN chown -R node:node /app
 
-# Switch to non-root user
-USER nodejs
+# Switch to non-root user (node user exists in node:18-alpine base image)
+USER node
 
 # Expose port
 EXPOSE 8080
