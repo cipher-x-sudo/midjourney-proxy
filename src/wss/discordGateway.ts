@@ -432,15 +432,28 @@ export class DiscordGateway {
       `running:${this.running}, ` +
       `sessionClosing:${this.sessionClosing}`);
 
-    // Warn if data looks uncompressed when we expect compressed
-    if (!isCompressed && isJson) {
+    // In zlib-stream format:
+    // - First message contains zlib header (78 da, etc.)
+    // - Subsequent messages are continuation chunks (no header, just raw deflate data)
+    // So we only check for zlib header on the first message
+    const isFirstMessage = this.messageCount === 1;
+    
+    // Warn if first message doesn't have zlib header (should have one)
+    if (isFirstMessage && !isCompressed && !isJson) {
+      console.warn(`[wss-${this.account.getDisplay()}] [DEBUG] WARNING: First message doesn't have zlib header! ` +
+        `First bytes: ${this.getHexDump(data, 32)}`);
+    }
+    
+    // Warn if we receive JSON data (shouldn't happen with zlib-stream)
+    if (isJson) {
       console.warn(`[wss-${this.account.getDisplay()}] [DEBUG] WARNING: Received JSON data but expecting zlib-stream! ` +
         `First bytes: ${this.getHexDump(data, 32)}`);
     }
-
-    // Warn if data doesn't look like either
-    if (!isCompressed && !isJson && data.length > 0) {
-      console.warn(`[wss-${this.account.getDisplay()}] [DEBUG] WARNING: Data doesn't look like zlib or JSON! ` +
+    
+    // Continuation chunks (messageCount > 1) don't have zlib headers - this is normal
+    // Only log if it's the first message and doesn't match expected format
+    if (isFirstMessage && !isCompressed && !isJson && data.length > 0) {
+      console.warn(`[wss-${this.account.getDisplay()}] [DEBUG] WARNING: First message doesn't look like zlib! ` +
         `First bytes: ${this.getHexDump(data, 32)}`);
     }
 
