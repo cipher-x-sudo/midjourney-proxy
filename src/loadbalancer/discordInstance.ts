@@ -32,6 +32,16 @@ export interface DiscordInstance {
   blend(finalFileNames: string[], dimensions: BlendDimensions, nonce: string): Promise<Message<void>>;
   upload(fileName: string, dataUrl: DataUrl): Promise<Message<string>>;
   sendImageMessage(content: string, finalFileName: string): Promise<Message<string>>;
+
+  // Connection status
+  getConnectionStatus(): {
+    connected: boolean;
+    running: boolean;
+    sessionId: string | null;
+    sequence: number | null;
+    websocketState: string;
+    hasSession: boolean;
+  };
 }
 
 // Export implementation

@@ -1100,5 +1100,35 @@ export class DiscordGateway {
     this.closeSocket();
     this.running = false;
   }
+
+  /**
+   * Get connection status
+   */
+  getConnectionStatus(): {
+    connected: boolean;
+    running: boolean;
+    sessionId: string | null;
+    sequence: number | null;
+    websocketState: string;
+    hasSession: boolean;
+  } {
+    let wsState = 'CLOSED';
+    if (this.ws) {
+      const state = this.ws.readyState;
+      wsState = state === WebSocket.CONNECTING ? 'CONNECTING' :
+                state === WebSocket.OPEN ? 'OPEN' :
+                state === WebSocket.CLOSING ? 'CLOSING' :
+                state === WebSocket.CLOSED ? 'CLOSED' : 'UNKNOWN';
+    }
+
+    return {
+      connected: this.running && this.ws?.readyState === WebSocket.OPEN,
+      running: this.running,
+      sessionId: this.sessionId,
+      sequence: this.sequence,
+      websocketState: wsState,
+      hasSession: this.sessionId !== null,
+    };
+  }
 }
 

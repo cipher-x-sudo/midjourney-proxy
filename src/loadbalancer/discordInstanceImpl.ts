@@ -285,5 +285,26 @@ export class DiscordInstanceImpl implements DiscordInstance {
   async sendImageMessage(content: string, finalFileName: string): Promise<Message<string>> {
     return this.service.sendImageMessage(content, finalFileName);
   }
+
+  getConnectionStatus(): {
+    connected: boolean;
+    running: boolean;
+    sessionId: string | null;
+    sequence: number | null;
+    websocketState: string;
+    hasSession: boolean;
+  } {
+    if (!this.gateway) {
+      return {
+        connected: false,
+        running: false,
+        sessionId: null,
+        sequence: null,
+        websocketState: 'NOT_INITIALIZED',
+        hasSession: false,
+      };
+    }
+    return this.gateway.getConnectionStatus();
+  }
 }
 

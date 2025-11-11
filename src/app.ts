@@ -175,6 +175,18 @@ export async function createApp(): Promise<FastifyInstance> {
     return accountController.list(request as any, reply);
   });
 
+  app.get(`${apiPrefix}/account/:id/status`, {
+    preHandler: authMiddleware,
+  }, async (request, reply) => {
+    return accountController.getStatus(request as any, reply);
+  });
+
+  app.get(`${apiPrefix}/account/status`, {
+    preHandler: authMiddleware,
+  }, async (request, reply) => {
+    return accountController.getAllStatus(request as any, reply);
+  });
+
   // Root redirect to doc.html
   app.get('/', async (request, reply) => {
     return reply.redirect('/doc.html');
