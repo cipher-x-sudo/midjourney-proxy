@@ -1009,6 +1009,7 @@ export class DiscordGateway {
     }
     
     let start = 0;
+    
     while (start < this.inflateBuffer.length) {
       // Look for complete JSON objects
       let jsonEnd = -1;
@@ -1058,12 +1059,14 @@ export class DiscordGateway {
           start++;
         }
       } else {
-        // Incomplete message, keep buffer
-        if (start > 0) {
-          this.inflateBuffer = this.inflateBuffer.slice(start);
-        }
+        // Incomplete message or no more complete messages
         break;
       }
+    }
+    
+    // Remove processed data from buffer after processing all complete messages
+    if (start > 0) {
+      this.inflateBuffer = this.inflateBuffer.slice(start);
     }
   }
 
