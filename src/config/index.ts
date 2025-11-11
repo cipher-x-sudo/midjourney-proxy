@@ -195,6 +195,17 @@ function loadConfig(): AppConfig {
         },
       };
     }
+
+    // Ensure discord object exists with defaults if missing from YAML
+    if (!config.mj.discord) {
+      config.mj.discord = {
+        userAgent: DEFAULT_DISCORD_USER_AGENT,
+        enable: true,
+        coreSize: 3,
+        queueSize: 10,
+        timeoutMinutes: 5,
+      };
+    }
   } catch (e) {
     console.error(`Failed to load config: ${e}`);
     throw e;
@@ -219,6 +230,9 @@ function loadConfig(): AppConfig {
   if (process.env.MJ_ACCOUNT_CHOOSE_RULE) {
     config.mj.accountChooseRule = process.env.MJ_ACCOUNT_CHOOSE_RULE;
   }
+
+  // Discord configuration from environment variables
+  // (discord object is already ensured to exist above after YAML load)
   if (process.env.MJ_DISCORD_GUILD_ID) {
     config.mj.discord.guildId = process.env.MJ_DISCORD_GUILD_ID;
   }
@@ -227,6 +241,47 @@ function loadConfig(): AppConfig {
   }
   if (process.env.MJ_DISCORD_USER_TOKEN) {
     config.mj.discord.userToken = process.env.MJ_DISCORD_USER_TOKEN;
+  }
+  if (process.env.MJ_DISCORD_USER_AGENT) {
+    config.mj.discord.userAgent = process.env.MJ_DISCORD_USER_AGENT;
+  }
+  if (process.env.MJ_DISCORD_ENABLE !== undefined) {
+    config.mj.discord.enable = process.env.MJ_DISCORD_ENABLE.toLowerCase() === 'true' || process.env.MJ_DISCORD_ENABLE === '1';
+  }
+  if (process.env.MJ_DISCORD_CORE_SIZE) {
+    const coreSize = parseInt(process.env.MJ_DISCORD_CORE_SIZE, 10);
+    if (!isNaN(coreSize)) {
+      config.mj.discord.coreSize = coreSize;
+    }
+  }
+  if (process.env.MJ_DISCORD_QUEUE_SIZE) {
+    const queueSize = parseInt(process.env.MJ_DISCORD_QUEUE_SIZE, 10);
+    if (!isNaN(queueSize)) {
+      config.mj.discord.queueSize = queueSize;
+    }
+  }
+  if (process.env.MJ_DISCORD_TIMEOUT_MINUTES) {
+    const timeoutMinutes = parseInt(process.env.MJ_DISCORD_TIMEOUT_MINUTES, 10);
+    if (!isNaN(timeoutMinutes)) {
+      config.mj.discord.timeoutMinutes = timeoutMinutes;
+    }
+  }
+
+  // Apply defaults for Discord fields if not set by env vars or YAML
+  if (!config.mj.discord.userAgent) {
+    config.mj.discord.userAgent = DEFAULT_DISCORD_USER_AGENT;
+  }
+  if (config.mj.discord.enable === undefined) {
+    config.mj.discord.enable = true;
+  }
+  if (config.mj.discord.coreSize === undefined) {
+    config.mj.discord.coreSize = 3;
+  }
+  if (config.mj.discord.queueSize === undefined) {
+    config.mj.discord.queueSize = 10;
+  }
+  if (config.mj.discord.timeoutMinutes === undefined) {
+    config.mj.discord.timeoutMinutes = 5;
   }
   if (process.env.MJ_TRANSLATE_WAY) {
     const translateWay = process.env.MJ_TRANSLATE_WAY.toUpperCase();
