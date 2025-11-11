@@ -36,7 +36,11 @@ export class DiscordGateway {
   private static readonly CLOSE_CODE_RECONNECT = 2001;
   private static readonly CLOSE_CODE_INVALIDATE = 1009;
   private static readonly CLOSE_CODE_EXCEPTION = 1011;
+  private static readonly CLOSE_CODE_ALREADY_AUTHENTICATED = 4005;
   private static readonly CONNECT_RETRY_LIMIT = 5;
+  
+  // Fatal error codes that should disable the account
+  private static readonly FATAL_ERROR_CODES = [4011, 4012, 4013, 4014]; // Authentication/authorization failures
 
   private account: DiscordAccount;
   private userMessageListener: UserMessageListener;
@@ -700,10 +704,35 @@ export class DiscordGateway {
 
     this.running = false;
 
-    if (code >= 4000) {
-      console.warn(`[wss-${this.account.getDisplay()}] Can't reconnect! Account disabled. Closed by ${code}(${reason}).`);
+    // Handle special case: 4005 "Already authenticated" - clear session and retry
+    if (code === DiscordGateway.CLOSE_CODE_ALREADY_AUTHENTICATED) {
+      console.warn(`[wss-${this.account.getDisplay()}] Session conflict (${code}): ${reason}. Clearing session and retrying...`);
+      // Clear session data to force a fresh connection
+      this.sessionId = null;
+      this.sequence = null;
+      this.resumeGatewayUrl = null;
+      // Wait a bit before retrying to avoid immediate conflict
+      setTimeout(() => {
+        this.tryNewConnect();
+      }, 2000); // 2 second delay
+      return;
+    }
+    
+    // Handle fatal authentication errors - disable account
+    if (DiscordGateway.FATAL_ERROR_CODES.includes(code)) {
+      console.warn(`[wss-${this.account.getDisplay()}] Fatal error! Account disabled. Closed by ${code}(${reason}).`);
       this.disableAccount();
-    } else if (code === DiscordGateway.CLOSE_CODE_RECONNECT) {
+      return;
+    }
+    
+    // Handle other 4xxx errors - log but don't disable (might be recoverable)
+    if (code >= 4000) {
+      console.warn(`[wss-${this.account.getDisplay()}] Gateway error ${code}(${reason}). Attempting reconnection...`);
+      this.tryNewConnect();
+      return;
+    }
+    
+    if (code === DiscordGateway.CLOSE_CODE_RECONNECT) {
       console.warn(`[wss-${this.account.getDisplay()}] Closed by ${code}(${reason}). Try reconnect...`);
       this.tryReconnect();
     } else {
