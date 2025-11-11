@@ -56,7 +56,7 @@ export class DiscordGateway {
   private running: boolean = false;
   private sessionClosing: boolean = false;
 
-  private decompressor: zlib.InflateRaw | null = null;
+  private decompressor: zlib.Inflate | null = null;
   private inflateBuffer: Buffer = Buffer.alloc(0);
 
   // Debugging and tracking variables
@@ -122,6 +122,8 @@ export class DiscordGateway {
       
       // Initialize zlib decompressor BEFORE creating WebSocket
       // This ensures it's ready before any data can arrive
+      // IMPORTANT: Discord Gateway uses zlib-stream with zlib headers (not raw deflate)
+      // The first chunk contains the zlib header (78 da), so we use createInflate (not createInflateRaw)
       this.decompressorCreatedTime = Date.now();
       const decompressorOptions = {
         chunkSize: 1024 * 16, // 16KB chunks
@@ -131,9 +133,12 @@ export class DiscordGateway {
       console.debug(`[wss-${this.account.getDisplay()}] [DEBUG] Creating decompressor - ` +
         `options:${JSON.stringify(decompressorOptions)}, ` +
         `time:${this.decompressorCreatedTime}, ` +
-        `connectionStartTime:${this.connectionStartTime}`);
+        `connectionStartTime:${this.connectionStartTime}, ` +
+        `type:createInflate (zlib with headers)`);
       
-      this.decompressor = zlib.createInflateRaw(decompressorOptions);
+      // Use createInflate instead of createInflateRaw because Discord sends zlib headers
+      // The first message contains the zlib header (78 da), subsequent messages are continuation chunks
+      this.decompressor = zlib.createInflate(decompressorOptions);
 
       this.decompressor.on('data', (chunk: Buffer) => {
         console.debug(`[wss-${this.account.getDisplay()}] [DEBUG] Decompressor emitted data - ` +
