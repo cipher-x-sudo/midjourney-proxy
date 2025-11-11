@@ -32,6 +32,8 @@ export class DiscordServiceImpl implements DiscordService {
   private discordInteractionUrl: string;
   private discordAttachmentUrl: string;
   private discordMessageUrl: string;
+  private sessionId: string | null = null;
+  private getSessionIdCallback: (() => string | null) | null = null;
 
   constructor(account: DiscordAccount, paramsMap: Map<string, any>, discordHelper: DiscordHelper) {
     this.account = account;
@@ -54,13 +56,50 @@ export class DiscordServiceImpl implements DiscordService {
   }
 
   /**
+   * Set session ID getter callback
+   */
+  setSessionIdGetter(callback: () => string | null): void {
+    this.getSessionIdCallback = callback;
+  }
+
+  /**
+   * Set session ID directly
+   */
+  setSessionId(sessionId: string | null): void {
+    this.sessionId = sessionId;
+  }
+
+  /**
+   * Get current session ID
+   */
+  private getSessionId(): string {
+    // Try callback first (dynamic from gateway)
+    if (this.getSessionIdCallback) {
+      const callbackSessionId = this.getSessionIdCallback();
+      if (callbackSessionId) {
+        console.debug(`[discord-service-${this.account.getDisplay()}] Using session ID from gateway: ${callbackSessionId}`);
+        return callbackSessionId;
+      }
+    }
+    // Try stored session ID
+    if (this.sessionId) {
+      console.debug(`[discord-service-${this.account.getDisplay()}] Using stored session ID: ${this.sessionId}`);
+      return this.sessionId;
+    }
+    // Fall back to default (for backward compatibility, though this should not happen in normal operation)
+    console.warn(`[discord-service-${this.account.getDisplay()}] WARNING: No session ID available, using default. This should not happen in normal operation.`);
+    return DiscordServiceImpl.DEFAULT_SESSION_ID;
+  }
+
+  /**
    * Replace interaction parameters
    */
   private replaceInteractionParams(template: string, nonce: string): string {
+    const sessionId = this.getSessionId();
     return template
       .replace('$guild_id', this.account.guildId || '')
       .replace('$channel_id', this.account.channelId || '')
-      .replace('$session_id', DiscordServiceImpl.DEFAULT_SESSION_ID)
+      .replace('$session_id', sessionId)
       .replace('$nonce', nonce);
   }
 
@@ -69,15 +108,26 @@ export class DiscordServiceImpl implements DiscordService {
    */
   private async postJsonAndCheckStatus(json: string): Promise<Message<void>> {
     try {
-      const response = await this.httpClient.post(this.discordInteractionUrl, JSON.parse(json));
+      const payload = JSON.parse(json);
+      const sessionId = payload.session_id;
+      console.debug(`[discord-service-${this.account.getDisplay()}] Sending interaction to Discord - sessionId:${sessionId}, type:${payload.type}, guildId:${payload.guild_id}, channelId:${payload.channel_id}`);
+      
+      const response = await this.httpClient.post(this.discordInteractionUrl, payload);
       if (response.status === 200 || response.status === 204) {
+        console.debug(`[discord-service-${this.account.getDisplay()}] Interaction sent successfully - status:${response.status}`);
         return Message.success<void>();
       }
+      console.warn(`[discord-service-${this.account.getDisplay()}] Interaction failed - HTTP ${response.status}`);
       return Message.failureWithDescription<void>(`HTTP ${response.status}`);
     } catch (error: any) {
       if (error.response) {
-        return Message.failureWithDescription<void>(`HTTP ${error.response.status}: ${error.response.statusText}`);
+        const status = error.response.status;
+        const statusText = error.response.statusText;
+        const errorData = error.response.data;
+        console.error(`[discord-service-${this.account.getDisplay()}] Discord API error - HTTP ${status}: ${statusText}`, errorData);
+        return Message.failureWithDescription<void>(`HTTP ${status}: ${statusText}`);
       }
+      console.error(`[discord-service-${this.account.getDisplay()}] Request error:`, error.message);
       return Message.failureWithDescription<void>(error.message);
     }
   }

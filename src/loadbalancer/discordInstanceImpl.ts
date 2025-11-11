@@ -45,6 +45,18 @@ export class DiscordInstanceImpl implements DiscordInstance {
     this.notifyService = notifyService;
     this.gateway = gateway;
 
+    // Connect DiscordService to gateway to get real session ID
+    if (this.gateway && this.service instanceof DiscordServiceImpl) {
+      // Set up callback to get session ID from gateway dynamically
+      this.service.setSessionIdGetter(() => {
+        if (this.gateway) {
+          const status = this.gateway.getConnectionStatus();
+          return status.sessionId;
+        }
+        return null;
+      });
+    }
+
     // Create task queue with concurrency limit
     const concurrency = account.coreSize || 3;
     this.taskQueueLimit = this.createConcurrencyLimiter(concurrency);
