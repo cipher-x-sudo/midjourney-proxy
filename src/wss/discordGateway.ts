@@ -75,6 +75,10 @@ export class DiscordGateway {
   
   // Track retry attempts for 4005 errors
   private authConflictRetryCount: number = 0;
+  
+  // Flags to prevent duplicate processing
+  private readyReceived: boolean = false;
+  private identifySent: boolean = false;
 
   private successCallback: SuccessCallback;
   private failureCallback: FailureCallback;
@@ -101,10 +105,11 @@ export class DiscordGateway {
    * Start WebSocket connection
    */
   async start(reconnect: boolean = false): Promise<void> {
-    this.sessionClosing = false;
-    
-    // Clean up previous connection
+    // Clean up previous connection first
     this.closeSocket();
+    
+    // Reset session closing flag AFTER cleanup to allow new connection
+    this.sessionClosing = false;
     
     const gatewayUrl = this.getGatewayUrl(reconnect);
     
@@ -128,6 +133,10 @@ export class DiscordGateway {
       this.messageCount = 0;
       this.lastMessageTime = null;
       this.lastDataReceived = null;
+      
+      // Reset flags for new connection
+      this.readyReceived = false;
+      this.identifySent = false;
       
       // Note: authConflictRetryCount is NOT reset here
       // It's only reset when READY/RESUMED is received (successful connection)
@@ -154,6 +163,12 @@ export class DiscordGateway {
       this.decompressor = zlib.createInflate(decompressorOptions);
 
       this.decompressor.on('data', (chunk: Buffer) => {
+        // Ignore data if connection is closing
+        if (this.sessionClosing) {
+          console.debug(`[wss-${this.account.getDisplay()}] [DEBUG] Ignoring decompressor data - connection is closing`);
+          return;
+        }
+        
         console.debug(`[wss-${this.account.getDisplay()}] [DEBUG] Decompressor emitted data - ` +
           `chunkSize:${chunk.length} bytes, ` +
           `bufferBefore:${this.inflateBuffer.length} bytes`);
@@ -163,6 +178,12 @@ export class DiscordGateway {
       });
 
       this.decompressor.on('error', (error: Error) => {
+        // Ignore errors if connection is already closing
+        if (this.sessionClosing) {
+          console.debug(`[wss-${this.account.getDisplay()}] [DEBUG] Decompressor error during cleanup - ignoring: ${error.message}`);
+          return;
+        }
+        
         const now = Date.now();
         const timeSinceStart = this.connectionStartTime ? (now - this.connectionStartTime) : -1;
         const timeSinceOpen = this.websocketOpenTime ? (now - this.websocketOpenTime) : -1;
@@ -299,6 +320,18 @@ export class DiscordGateway {
    * Handle incoming message
    */
   private handleMessage(json: string): void {
+    // Don't process messages if connection is closing or closed
+    if (this.sessionClosing) {
+      console.debug(`[wss-${this.account.getDisplay()}] [DEBUG] Ignoring message - connection is closing`);
+      return;
+    }
+    
+    // Validate WebSocket is still open
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+      console.debug(`[wss-${this.account.getDisplay()}] [DEBUG] Ignoring message - WebSocket not open (state: ${this.ws ? this.ws.readyState : 'null'})`);
+      return;
+    }
+    
     try {
       const data = JSON.parse(json);
       const opCode = data.op;
@@ -313,7 +346,12 @@ export class DiscordGateway {
           break;
         case WebSocketCode.HELLO:
           this.handleHello(data);
-          this.doResumeOrIdentify();
+          // Only send IDENTIFY/RESUME if not already sent and connection is not established
+          if (!this.identifySent && !this.running) {
+            this.doResumeOrIdentify();
+          } else {
+            console.warn(`[wss-${this.account.getDisplay()}] [DEBUG] HELLO received but IDENTIFY already sent or connection established - ignoring`);
+          }
           break;
         case WebSocketCode.RESUME:
           this.onSuccess();
@@ -392,6 +430,12 @@ export class DiscordGateway {
    * Handle WebSocket message (buffer for zlib-stream)
    */
   private handleWebSocketMessage(data: Buffer): void {
+    // Don't process messages if connection is closing
+    if (this.sessionClosing) {
+      console.debug(`[wss-${this.account.getDisplay()}] [DEBUG] Ignoring WebSocket message - connection is closing`);
+      return;
+    }
+    
     const now = Date.now();
     this.lastMessageTime = now;
     this.lastDataReceived = data;
@@ -421,7 +465,7 @@ export class DiscordGateway {
                       wsState === WebSocket.CLOSED ? 'CLOSED' : 'UNKNOWN';
 
     if (wsState !== WebSocket.OPEN) {
-      console.warn(`[wss-${this.account.getDisplay()}] [DEBUG] WebSocket not OPEN, state: ${wsStateStr}`);
+      console.warn(`[wss-${this.account.getDisplay()}] [DEBUG] WebSocket not OPEN, state: ${wsStateStr} - ignoring message`);
       return;
     }
 
@@ -550,13 +594,40 @@ export class DiscordGateway {
     const content = data.d;
 
     if (eventType === 'READY') {
+      // Prevent processing READY twice
+      if (this.readyReceived) {
+        console.warn(`[wss-${this.account.getDisplay()}] [DEBUG] READY event received again - ignoring duplicate. ` +
+          `sessionId:${content.session_id}, currentSessionId:${this.sessionId}`);
+        return;
+      }
+      
+      // Don't process READY if connection is closing
+      if (this.sessionClosing) {
+        console.warn(`[wss-${this.account.getDisplay()}] [DEBUG] READY event received but connection is closing - ignoring`);
+        return;
+      }
+      
       this.sessionId = content.session_id;
       this.resumeGatewayUrl = content.resume_gateway_url;
+      this.readyReceived = true;
       console.debug(`[wss-${this.account.getDisplay()}] READY event received - sessionId:${this.sessionId}, resumeGatewayUrl:${this.resumeGatewayUrl}`);
       // Reset auth conflict retry count on successful connection
       this.authConflictRetryCount = 0;
       this.onSuccess();
     } else if (eventType === 'RESUMED') {
+      // Prevent processing RESUMED twice
+      if (this.readyReceived) {
+        console.warn(`[wss-${this.account.getDisplay()}] [DEBUG] RESUMED event received but READY already processed - ignoring`);
+        return;
+      }
+      
+      // Don't process RESUMED if connection is closing
+      if (this.sessionClosing) {
+        console.warn(`[wss-${this.account.getDisplay()}] [DEBUG] RESUMED event received but connection is closing - ignoring`);
+        return;
+      }
+      
+      this.readyReceived = true;
       console.debug(`[wss-${this.account.getDisplay()}] RESUMED event received`);
       // Reset auth conflict retry count on successful resume
       this.authConflictRetryCount = 0;
@@ -574,6 +645,17 @@ export class DiscordGateway {
    * Resume or identify
    */
   private doResumeOrIdentify(): void {
+    // Don't send IDENTIFY/RESUME if already sent or connection is established
+    if (this.identifySent) {
+      console.warn(`[wss-${this.account.getDisplay()}] [DEBUG] IDENTIFY/RESUME already sent - ignoring duplicate call`);
+      return;
+    }
+    
+    if (this.running) {
+      console.warn(`[wss-${this.account.getDisplay()}] [DEBUG] Connection already established (running=true) - ignoring IDENTIFY/RESUME`);
+      return;
+    }
+    
     if (!this.sessionId) {
       console.debug(`[wss-${this.account.getDisplay()}] No session ID, sending IDENTIFY (new connection)`);
       this.sendIdentify();
@@ -587,15 +669,28 @@ export class DiscordGateway {
    * Send IDENTIFY
    */
   private sendIdentify(): void {
+    // Guard against duplicate sends
+    if (this.identifySent) {
+      console.warn(`[wss-${this.account.getDisplay()}] [DEBUG] IDENTIFY already sent - ignoring duplicate`);
+      return;
+    }
+    
     const authData = this.createAuthData();
     console.debug(`[wss-${this.account.getDisplay()}] Sending IDENTIFY payload`);
     this.sendMessage(WebSocketCode.IDENTIFY, authData);
+    this.identifySent = true;
   }
 
   /**
    * Send RESUME
    */
   private sendResume(): void {
+    // Guard against duplicate sends
+    if (this.identifySent) {
+      console.warn(`[wss-${this.account.getDisplay()}] [DEBUG] RESUME/IDENTIFY already sent - ignoring duplicate`);
+      return;
+    }
+    
     const data = {
       token: this.account.userToken,
       session_id: this.sessionId,
@@ -603,6 +698,7 @@ export class DiscordGateway {
     };
     console.debug(`[wss-${this.account.getDisplay()}] Sending RESUME payload - sessionId:${this.sessionId}, seq:${this.sequence}`);
     this.sendMessage(WebSocketCode.RESUME, data);
+    this.identifySent = true;
   }
 
   /**
@@ -827,22 +923,14 @@ export class DiscordGateway {
     this.clearHeartbeatInterval();
     this.clearHeartbeatTimeout();
 
-    // Close WebSocket first
-    if (this.ws) {
-      try {
-        if (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING) {
-          this.sessionClosing = true;
-          // Remove listeners to prevent event handling during cleanup
-          this.ws.removeAllListeners();
-          this.ws.close();
-        }
-      } catch (error) {
-        // Ignore cleanup errors
-      }
-      this.ws = null;
-    }
-
-    // Then cleanup decompressor (after WebSocket is closed to prevent new data)
+    // Set session closing flag immediately to prevent processing new messages
+    this.sessionClosing = true;
+    
+    // CRITICAL: Clear buffer FIRST to prevent processing stale data
+    this.inflateBuffer = Buffer.alloc(0);
+    
+    // CRITICAL: Destroy decompressor FIRST (before closing WebSocket)
+    // This prevents decompressor from processing data after cleanup starts
     if (this.decompressor) {
       try {
         const decompressorState = this.getDecompressorState();
@@ -851,7 +939,7 @@ export class DiscordGateway {
           `messageCount:${this.messageCount}, ` +
           `inflateBufferLength:${this.inflateBuffer.length}`);
         
-        // Remove all event listeners first to prevent new events
+        // Remove all event listeners FIRST to prevent new events from firing
         this.decompressor.removeAllListeners();
         // Destroy the stream to fully clean up internal state
         this.decompressor.destroy();
@@ -864,9 +952,20 @@ export class DiscordGateway {
       this.decompressor = null;
       this.decompressorCreatedTime = null;
     }
-    
-    // Reset buffer last
-    this.inflateBuffer = Buffer.alloc(0);
+
+    // THEN close WebSocket (after decompressor is destroyed)
+    if (this.ws) {
+      try {
+        if (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING) {
+          // Remove listeners to prevent event handling during cleanup
+          this.ws.removeAllListeners();
+          this.ws.close();
+        }
+      } catch (error) {
+        // Ignore cleanup errors
+      }
+      this.ws = null;
+    }
     
     // Reset tracking variables
     this.messageCount = 0;
@@ -874,6 +973,10 @@ export class DiscordGateway {
     this.lastDataReceived = null;
     this.websocketOpenTime = null;
     this.connectionStartTime = null;
+    
+    // Reset flags
+    this.readyReceived = false;
+    this.identifySent = false;
   }
 
   /**
@@ -900,6 +1003,11 @@ export class DiscordGateway {
    * Process inflate buffer and extract complete JSON messages
    */
   private processInflateBuffer(): void {
+    // Don't process buffer if connection is closing
+    if (this.sessionClosing) {
+      return;
+    }
+    
     let start = 0;
     while (start < this.inflateBuffer.length) {
       // Look for complete JSON objects
