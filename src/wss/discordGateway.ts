@@ -560,8 +560,10 @@ export class DiscordGateway {
    */
   private doResumeOrIdentify(): void {
     if (!this.sessionId) {
+      console.debug(`[wss-${this.account.getDisplay()}] No session ID, sending IDENTIFY (new connection)`);
       this.sendIdentify();
     } else {
+      console.debug(`[wss-${this.account.getDisplay()}] Session ID exists, sending RESUME - sessionId:${this.sessionId}, sequence:${this.sequence}`);
       this.sendResume();
     }
   }
@@ -571,6 +573,7 @@ export class DiscordGateway {
    */
   private sendIdentify(): void {
     const authData = this.createAuthData();
+    console.debug(`[wss-${this.account.getDisplay()}] Sending IDENTIFY payload`);
     this.sendMessage(WebSocketCode.IDENTIFY, authData);
   }
 
@@ -583,6 +586,7 @@ export class DiscordGateway {
       session_id: this.sessionId,
       seq: this.sequence,
     };
+    console.debug(`[wss-${this.account.getDisplay()}] Sending RESUME payload - sessionId:${this.sessionId}, seq:${this.sequence}`);
     this.sendMessage(WebSocketCode.RESUME, data);
   }
 
@@ -706,13 +710,18 @@ export class DiscordGateway {
 
     // Handle special case: 4005 "Already authenticated" - clear session and retry
     if (code === DiscordGateway.CLOSE_CODE_ALREADY_AUTHENTICATED) {
-      console.warn(`[wss-${this.account.getDisplay()}] Session conflict (${code}): ${reason}. Clearing session and retrying...`);
-      // Clear session data to force a fresh connection
+      console.warn(`[wss-${this.account.getDisplay()}] Session conflict (${code}): ${reason}`);
+      console.warn(`[wss-${this.account.getDisplay()}] Current session state - sessionId:${this.sessionId}, sequence:${this.sequence}, running:${this.running}`);
+      console.warn(`[wss-${this.account.getDisplay()}] Clearing session and retrying with fresh IDENTIFY in 2 seconds...`);
+      // Clear session data to force a fresh connection (IDENTIFY instead of RESUME)
       this.sessionId = null;
       this.sequence = null;
       this.resumeGatewayUrl = null;
+      this.resumeData = null;
       // Wait a bit before retrying to avoid immediate conflict
+      // This gives Discord time to close the conflicting session
       setTimeout(() => {
+        console.debug(`[wss-${this.account.getDisplay()}] Retrying connection after 4005 error...`);
         this.tryNewConnect();
       }, 2000); // 2 second delay
       return;
