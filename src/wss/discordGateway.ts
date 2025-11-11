@@ -38,6 +38,8 @@ export class DiscordGateway {
   private static readonly CLOSE_CODE_EXCEPTION = 1011;
   private static readonly CLOSE_CODE_ALREADY_AUTHENTICATED = 4005;
   private static readonly CONNECT_RETRY_LIMIT = 5;
+  private static readonly AUTH_CONFLICT_RETRY_LIMIT = 3; // Max retries for 4005 errors
+  private static readonly AUTH_CONFLICT_RETRY_DELAY = 5000; // 5 second delay for 4005 retries
   
   // Fatal error codes that should disable the account
   private static readonly FATAL_ERROR_CODES = [4011, 4012, 4013, 4014]; // Authentication/authorization failures
@@ -70,6 +72,9 @@ export class DiscordGateway {
   private lastMessageTime: number | null = null;
   private lastDataReceived: Buffer | null = null;
   private decompressorCreatedTime: number | null = null;
+  
+  // Track retry attempts for 4005 errors
+  private authConflictRetryCount: number = 0;
 
   private successCallback: SuccessCallback;
   private failureCallback: FailureCallback;
@@ -123,6 +128,10 @@ export class DiscordGateway {
       this.messageCount = 0;
       this.lastMessageTime = null;
       this.lastDataReceived = null;
+      
+      // Note: authConflictRetryCount is NOT reset here
+      // It's only reset when READY/RESUMED is received (successful connection)
+      // This allows tracking consecutive 4005 failures across retry attempts
       
       // Initialize zlib decompressor BEFORE creating WebSocket
       // This ensures it's ready before any data can arrive
@@ -543,8 +552,14 @@ export class DiscordGateway {
     if (eventType === 'READY') {
       this.sessionId = content.session_id;
       this.resumeGatewayUrl = content.resume_gateway_url;
+      console.debug(`[wss-${this.account.getDisplay()}] READY event received - sessionId:${this.sessionId}, resumeGatewayUrl:${this.resumeGatewayUrl}`);
+      // Reset auth conflict retry count on successful connection
+      this.authConflictRetryCount = 0;
       this.onSuccess();
     } else if (eventType === 'RESUMED') {
+      console.debug(`[wss-${this.account.getDisplay()}] RESUMED event received`);
+      // Reset auth conflict retry count on successful resume
+      this.authConflictRetryCount = 0;
       this.onSuccess();
     } else {
       try {
@@ -710,20 +725,33 @@ export class DiscordGateway {
 
     // Handle special case: 4005 "Already authenticated" - clear session and retry
     if (code === DiscordGateway.CLOSE_CODE_ALREADY_AUTHENTICATED) {
+      this.authConflictRetryCount++;
       console.warn(`[wss-${this.account.getDisplay()}] Session conflict (${code}): ${reason}`);
       console.warn(`[wss-${this.account.getDisplay()}] Current session state - sessionId:${this.sessionId}, sequence:${this.sequence}, running:${this.running}`);
-      console.warn(`[wss-${this.account.getDisplay()}] Clearing session and retrying with fresh IDENTIFY in 2 seconds...`);
+      console.warn(`[wss-${this.account.getDisplay()}] Auth conflict retry count: ${this.authConflictRetryCount}/${DiscordGateway.AUTH_CONFLICT_RETRY_LIMIT}`);
+      
+      // If we've retried too many times, disable account to prevent infinite loop
+      if (this.authConflictRetryCount >= DiscordGateway.AUTH_CONFLICT_RETRY_LIMIT) {
+        console.error(`[wss-${this.account.getDisplay()}] Too many auth conflicts (${this.authConflictRetryCount}). ` +
+          `This usually means the token is being used elsewhere (browser, app, or another instance). ` +
+          `Account will be disabled. Please check if the token is used in multiple places.`);
+        this.disableAccount();
+        return;
+      }
+      
+      console.warn(`[wss-${this.account.getDisplay()}] Clearing session and retrying with fresh IDENTIFY in ${DiscordGateway.AUTH_CONFLICT_RETRY_DELAY}ms...`);
       // Clear session data to force a fresh connection (IDENTIFY instead of RESUME)
       this.sessionId = null;
       this.sequence = null;
       this.resumeGatewayUrl = null;
       this.resumeData = null;
-      // Wait a bit before retrying to avoid immediate conflict
+      // Wait longer before retrying to avoid immediate conflict
       // This gives Discord time to close the conflicting session
+      // Also gives time for any other client using the token to disconnect
       setTimeout(() => {
-        console.debug(`[wss-${this.account.getDisplay()}] Retrying connection after 4005 error...`);
+        console.debug(`[wss-${this.account.getDisplay()}] Retrying connection after 4005 error (attempt ${this.authConflictRetryCount})...`);
         this.tryNewConnect();
-      }, 2000); // 2 second delay
+      }, DiscordGateway.AUTH_CONFLICT_RETRY_DELAY);
       return;
     }
     
