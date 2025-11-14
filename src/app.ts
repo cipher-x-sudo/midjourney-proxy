@@ -33,10 +33,14 @@ import { ReturnCode } from './constants';
  * Create Fastify application
  */
 export async function createApp(): Promise<FastifyInstance> {
+  // Default body limit is 25MB to handle base64-encoded images
+  const bodyLimit = config.server.bodyLimit || 25 * 1024 * 1024;
+  
   const app = Fastify({
     logger: {
       level: config.logging.level,
     },
+    bodyLimit: bodyLimit,
   });
 
   // Register CORS

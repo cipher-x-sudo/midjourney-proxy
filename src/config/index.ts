@@ -89,6 +89,7 @@ export interface ProxyProperties {
 export interface ServerConfig {
   port: number;
   contextPath: string;
+  bodyLimit?: number; // Request body size limit in bytes (default: 25MB)
 }
 
 /**
@@ -132,6 +133,54 @@ function parseDuration(duration: string): number {
 }
 
 /**
+ * Parse body limit string or number to bytes
+ * Supports formats: "25mb", "25MB", "26214400", 26214400
+ */
+function parseBodyLimit(value: string | number | undefined): number | undefined {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+  
+  if (typeof value === 'number') {
+    return value;
+  }
+  
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    const match = trimmed.match(/^(\d+)([kmgKMG][bB]?)?$/);
+    if (!match) {
+      // Try parsing as plain number
+      const numValue = parseInt(trimmed, 10);
+      if (!isNaN(numValue)) {
+        return numValue;
+      }
+      throw new Error(`Invalid body limit format: ${value}`);
+    }
+    
+    const numValue = parseInt(match[1], 10);
+    const unit = match[2]?.toLowerCase() || '';
+    
+    switch (unit) {
+      case 'kb':
+      case 'k':
+        return numValue * 1024;
+      case 'mb':
+      case 'm':
+        return numValue * 1024 * 1024;
+      case 'gb':
+      case 'g':
+        return numValue * 1024 * 1024 * 1024;
+      case '':
+        return numValue;
+      default:
+        throw new Error(`Unknown body limit unit: ${unit}`);
+    }
+  }
+  
+  return undefined;
+}
+
+/**
  * Load configuration from YAML file and environment variables
  */
 function loadConfig(): AppConfig {
@@ -163,6 +212,7 @@ function loadConfig(): AppConfig {
         server: {
           port: 8080,
           contextPath: '/mj',
+          bodyLimit: 25 * 1024 * 1024, // Default 25MB
         },
         logging: {
           level: 'info',
@@ -196,6 +246,25 @@ function loadConfig(): AppConfig {
       };
     }
 
+    // Ensure server object exists
+    if (!config.server) {
+      config.server = {
+        port: 8080,
+        contextPath: '/mj',
+        bodyLimit: 25 * 1024 * 1024, // Default 25MB
+      };
+    } else {
+      // Parse bodyLimit if present in YAML
+      if ((config.server as any).bodyLimit !== undefined) {
+        try {
+          config.server.bodyLimit = parseBodyLimit((config.server as any).bodyLimit);
+        } catch (e) {
+          console.warn(`Failed to parse bodyLimit from config, using default: ${e}`);
+          config.server.bodyLimit = 25 * 1024 * 1024; // Default 25MB
+        }
+      }
+    }
+
     // Ensure discord object exists with defaults if missing from YAML
     if (!config.mj.discord) {
       config.mj.discord = {
@@ -214,6 +283,21 @@ function loadConfig(): AppConfig {
   // Override with environment variables
   if (process.env.PORT) {
     config.server.port = parseInt(process.env.PORT, 10);
+  }
+  if (process.env.MJ_BODY_LIMIT) {
+    try {
+      const parsed = parseBodyLimit(process.env.MJ_BODY_LIMIT);
+      if (parsed !== undefined) {
+        config.server.bodyLimit = parsed;
+      }
+    } catch (e) {
+      console.warn(`Failed to parse MJ_BODY_LIMIT environment variable, using default: ${e}`);
+    }
+  }
+  
+  // Set default bodyLimit if not specified
+  if (config.server.bodyLimit === undefined) {
+    config.server.bodyLimit = 25 * 1024 * 1024; // Default 25MB
   }
   if (process.env.MJ_API_SECRET) {
     config.mj.apiSecret = process.env.MJ_API_SECRET;

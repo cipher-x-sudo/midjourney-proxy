@@ -1,6 +1,9 @@
 server:
   port: 8080
   contextPath: /mj
+  # bodyLimit: Request body size limit in bytes (default: 25MB = 26214400)
+  # Can be specified as number (bytes) or string (e.g., "25mb", "26214400")
+  # bodyLimit: 26214400  # 25MB in bytes
 
 logging:
   level: info
