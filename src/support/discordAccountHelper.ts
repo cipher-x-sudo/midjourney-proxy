@@ -129,7 +129,7 @@ export class DiscordAccountHelper {
     return [
       new ErrorMessageHandler(this.discordHelper),
       new CaptchaEmbeddedHandler(this.discordHelper),
-      new SeedDmHandler(this.discordHelper),
+      new SeedDmHandler(this.discordHelper, this.taskStoreService),
       new DescribeSuccessHandler(this.discordHelper),
       new ShortenSuccessHandler(this.discordHelper),
       new BlendSuccessHandler(this.discordHelper),
