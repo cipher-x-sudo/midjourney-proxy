@@ -23,13 +23,20 @@ export class TaskController {
     
     // Check queue tasks first
     const queueTasks = this.discordLoadBalancer.getQueueTasks();
-    const queueTask = queueTasks.find(t => t.id === id);
-    if (queueTask) {
-      return queueTask;
+    let task = queueTasks.find(t => t.id === id);
+    if (task) {
+      return task;
+    }
+
+    // Check running tasks if not found in queue
+    const runningTasks = this.discordLoadBalancer.getRunningTasks();
+    task = runningTasks.find(t => t.id === id);
+    if (task) {
+      return task;
     }
 
     // Then check stored tasks
-    const task = await this.taskStoreService.get(id);
+    task = await this.taskStoreService.get(id);
     return task || null;
   }
 
@@ -78,6 +85,12 @@ export class TaskController {
     // Check queue tasks first
     const queueTasks = this.discordLoadBalancer.getQueueTasks();
     let task = queueTasks.find(t => t.id === id);
+    
+    // Check running tasks if not found in queue
+    if (!task) {
+      const runningTasks = this.discordLoadBalancer.getRunningTasks();
+      task = runningTasks.find(t => t.id === id);
+    }
     
     // Then check stored tasks
     if (!task) {
