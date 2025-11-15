@@ -69,43 +69,6 @@ export class DiscordLoadBalancer {
   }
 
   /**
-   * Get running tasks from all instances
-   */
-  getRunningTasks(): Task[] {
-    const tasks: Task[] = [];
-    for (const instance of this.getAliveInstances()) {
-      tasks.push(...instance.getRunningTasks());
-    }
-    return tasks;
-  }
-
-  /**
-   * Get task by ID from all sources (queue, running, store)
-   */
-  async getTaskById(id: string, taskStoreService: any): Promise<Task | undefined> {
-    // Check queue tasks first
-    const queueTasks = this.getQueueTasks();
-    let task = queueTasks.find(t => t.id === id);
-    if (task) {
-      return task;
-    }
-
-    // Check running tasks
-    const runningTasks = this.getRunningTasks();
-    task = runningTasks.find(t => t.id === id);
-    if (task) {
-      return task;
-    }
-
-    // Finally check stored tasks
-    if (taskStoreService) {
-      return await taskStoreService.get(id);
-    }
-
-    return undefined;
-  }
-
-  /**
    * Add instance
    */
   addInstance(instance: DiscordInstance): void {

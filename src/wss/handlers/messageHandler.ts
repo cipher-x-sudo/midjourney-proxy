@@ -149,7 +149,7 @@ export abstract class MessageHandler {
       
       // Only react if we have both messageId and channelId
       if (messageId && channelId) {
-        const envelopeEmoji = '\u{1F4E7}'; // ✉️ envelope emoji
+        const envelopeEmoji = '\u{2709}\u{FE0F}'; // ✉️ envelope emoji (U+2709 with variation selector)
         
         // Fire-and-forget: react with envelope emoji (don't await, don't block)
         instance.reactWithEmoji(messageId, channelId, envelopeEmoji).catch((error: any) => {
