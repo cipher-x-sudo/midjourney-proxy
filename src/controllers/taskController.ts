@@ -74,6 +74,7 @@ export class TaskController {
 
   async imageSeed(request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply): Promise<any> {
     const id = request.params.id;
+    console.log(`[task-controller] imageSeed request for task ${id}`);
     
     // Check queue tasks first
     const queueTasks = this.discordLoadBalancer.getQueueTasks();
@@ -82,10 +83,16 @@ export class TaskController {
     // Then check stored tasks
     if (!task) {
       task = await this.taskStoreService.get(id);
+      if (task) {
+        console.log(`[task-controller] Task ${id} found in stored tasks`);
+      }
+    } else {
+      console.log(`[task-controller] Task ${id} found in queue tasks`);
     }
 
     // Task not found
     if (!task) {
+      console.log(`[task-controller] Task ${id} not found in queue or stored tasks`);
       return {
         code: ReturnCode.NOT_FOUND,
         description: 'Task not found',
@@ -94,16 +101,26 @@ export class TaskController {
 
     // Get seed from task properties
     const seed = task.getProperty(TASK_PROPERTY_SEED);
+    console.log(`[task-controller] Task ${id} seed property: ${seed || 'not set'}`);
+    
+    // Get task finish time for better error message
+    const finishTime = task.finishTime;
+    const taskAge = finishTime ? Date.now() - finishTime : null;
 
     // Seed not available
     if (!seed) {
+      const ageMessage = taskAge !== null && taskAge < 120000 
+        ? ` (task completed ${Math.round(taskAge / 1000)} seconds ago, DM may be delayed)` 
+        : '';
+      console.log(`[task-controller] Task ${id} found but seed not available${ageMessage}`);
       return {
         code: ReturnCode.NOT_FOUND,
-        description: 'Seed not available',
+        description: `Seed not yet received from MidJourney (DM may be delayed)${ageMessage}`,
       };
     }
 
     // Success - return seed
+    console.log(`[task-controller] Task ${id} seed retrieved successfully: ${seed}`);
     return {
       code: ReturnCode.SUCCESS,
       description: 'Success',
