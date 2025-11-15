@@ -65,7 +65,7 @@ export class DescribeSuccessHandler extends MessageHandler {
       task.imageUrl = this.replaceCdnUrl(imageUrl);
     }
     
-    this.finishTask(task, message);
+    this.finishTask(instance, task, message);
   }
 }
 

@@ -33,6 +33,7 @@ export interface DiscordInstance {
   blend(finalFileNames: string[], dimensions: BlendDimensions, nonce: string): Promise<Message<void>>;
   upload(fileName: string, dataUrl: DataUrl): Promise<Message<string>>;
   sendImageMessage(content: string, finalFileName: string): Promise<Message<string>>;
+  reactWithEmoji(messageId: string, channelId: string, emoji: string): Promise<Message<void>>;
 
   // Connection status
   getConnectionStatus(): {

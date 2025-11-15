@@ -19,6 +19,7 @@ export interface DiscordService {
   blend(finalFileNames: string[], dimensions: BlendDimensions, nonce: string): Promise<Message<void>>;
   upload(fileName: string, dataUrl: DataUrl): Promise<Message<string>>;
   sendImageMessage(content: string, finalFileName: string): Promise<Message<string>>;
+  reactWithEmoji(messageId: string, channelId: string, emoji: string): Promise<Message<void>>;
 }
 
 /**
@@ -284,6 +285,36 @@ export class DiscordServiceImpl implements DiscordService {
     } catch (error: any) {
       console.error('Failed to send image message to Discord:', error);
       return Message.failureWithDescription<string>(error.message);
+    }
+  }
+
+  async reactWithEmoji(messageId: string, channelId: string, emoji: string): Promise<Message<void>> {
+    try {
+      const discordServer = this.discordHelper.getServer();
+      // URL encode the emoji for the API endpoint
+      const encodedEmoji = encodeURIComponent(emoji);
+      const reactionUrl = `${discordServer}/api/v9/channels/${channelId}/messages/${messageId}/reactions/${encodedEmoji}/@me`;
+      
+      console.debug(`[discord-service-${this.account.getDisplay()}] Reacting with emoji ${emoji} to message ${messageId} in channel ${channelId}`);
+      
+      const response = await this.httpClient.put(reactionUrl, {});
+      
+      if (response.status === 204) {
+        console.debug(`[discord-service-${this.account.getDisplay()}] Reaction sent successfully`);
+        return Message.success<void>();
+      }
+      console.warn(`[discord-service-${this.account.getDisplay()}] Reaction failed - HTTP ${response.status}`);
+      return Message.failureWithDescription<void>(`HTTP ${response.status}`);
+    } catch (error: any) {
+      if (error.response) {
+        const status = error.response.status;
+        const statusText = error.response.statusText;
+        const errorData = error.response.data;
+        console.error(`[discord-service-${this.account.getDisplay()}] Discord reaction API error - HTTP ${status}: ${statusText}`, errorData);
+        return Message.failureWithDescription<void>(`HTTP ${status}: ${statusText}`);
+      }
+      console.error(`[discord-service-${this.account.getDisplay()}] Reaction request error:`, error.message);
+      return Message.failureWithDescription<void>(error.message);
     }
   }
 }

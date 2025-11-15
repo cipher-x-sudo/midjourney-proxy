@@ -13,6 +13,7 @@ import { VariationSuccessHandler } from '../wss/handlers/variationSuccessHandler
 import { RerollSuccessHandler } from '../wss/handlers/rerollSuccessHandler';
 import { DescribeSuccessHandler } from '../wss/handlers/describeSuccessHandler';
 import { ShortenSuccessHandler } from '../wss/handlers/shortenSuccessHandler';
+import { SeedDmHandler } from '../wss/handlers/seedDmHandler';
 import { BlendSuccessHandler } from '../wss/handlers/blendSuccessHandler';
 import { StartAndProgressHandler } from '../wss/handlers/startAndProgressHandler';
 import { ErrorMessageHandler } from '../wss/handlers/errorMessageHandler';
@@ -128,6 +129,7 @@ export class DiscordAccountHelper {
     return [
       new ErrorMessageHandler(this.discordHelper),
       new CaptchaEmbeddedHandler(this.discordHelper),
+      new SeedDmHandler(this.discordHelper),
       new DescribeSuccessHandler(this.discordHelper),
       new ShortenSuccessHandler(this.discordHelper),
       new BlendSuccessHandler(this.discordHelper),

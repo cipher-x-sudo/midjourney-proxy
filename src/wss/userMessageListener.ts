@@ -55,14 +55,25 @@ export class UserMessageListener {
    */
   private ignoreAndLogMessage(data: any, messageType: MessageType): boolean {
     const channelId = data.channel_id;
-    if (!this.instance || channelId !== this.instance.account().channelId) {
+    const guildId = data.guild_id;
+    
+    // Allow DM messages (no guild_id) to pass through
+    const isDM = !guildId || data.channel_type === 1;
+    
+    if (!this.instance) {
+      return true;
+    }
+    
+    // For non-DM messages, filter by channel_id
+    if (!isDM && channelId !== this.instance.account().channelId) {
       return true;
     }
 
     const authorName = data.author?.username || 'System';
     const content = data.content || '';
+    const channelTypeStr = isDM ? 'DM' : 'Channel';
     console.debug(
-      `${this.instance.account().getDisplay()} - ${messageType} - ${authorName}: ${content}`
+      `${this.instance.account().getDisplay()} - ${messageType} - ${channelTypeStr} - ${authorName}: ${content}`
     );
 
     return false;

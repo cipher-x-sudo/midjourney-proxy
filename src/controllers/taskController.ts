@@ -3,6 +3,8 @@ import { Task } from '../models/Task';
 import { TaskConditionDTO } from '../dto/TaskConditionDTO';
 import { TaskStoreService } from '../services/store/taskStoreService';
 import { DiscordLoadBalancer } from '../loadbalancer/discordLoadBalancer';
+import { ReturnCode } from '../constants';
+import { TASK_PROPERTY_SEED } from '../constants';
 
 /**
  * Task controller
@@ -68,6 +70,45 @@ export class TaskController {
     }
 
     return result;
+  }
+
+  async imageSeed(request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply): Promise<any> {
+    const id = request.params.id;
+    
+    // Check queue tasks first
+    const queueTasks = this.discordLoadBalancer.getQueueTasks();
+    let task = queueTasks.find(t => t.id === id);
+    
+    // Then check stored tasks
+    if (!task) {
+      task = await this.taskStoreService.get(id);
+    }
+
+    // Task not found
+    if (!task) {
+      return {
+        code: ReturnCode.NOT_FOUND,
+        description: 'Task not found',
+      };
+    }
+
+    // Get seed from task properties
+    const seed = task.getProperty(TASK_PROPERTY_SEED);
+
+    // Seed not available
+    if (!seed) {
+      return {
+        code: ReturnCode.NOT_FOUND,
+        description: 'Seed not available',
+      };
+    }
+
+    // Success - return seed
+    return {
+      code: ReturnCode.SUCCESS,
+      description: 'Success',
+      seed: seed,
+    };
   }
 }
 

@@ -32,6 +32,7 @@ export const TASK_PROPERTY_FLAGS = 'flags';
 export const TASK_PROPERTY_NONCE = 'nonce';
 export const TASK_PROPERTY_DISCORD_INSTANCE_ID = 'discordInstanceId';
 export const TASK_PROPERTY_REFERENCED_MESSAGE_ID = 'referencedMessageId';
+export const TASK_PROPERTY_SEED = 'seed';
 
 /**
  * API secret header name

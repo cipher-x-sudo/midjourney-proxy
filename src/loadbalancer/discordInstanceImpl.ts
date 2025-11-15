@@ -302,6 +302,10 @@ export class DiscordInstanceImpl implements DiscordInstance {
     return this.service.sendImageMessage(content, finalFileName);
   }
 
+  async reactWithEmoji(messageId: string, channelId: string, emoji: string): Promise<Message<void>> {
+    return this.service.reactWithEmoji(messageId, channelId, emoji);
+  }
+
   getConnectionStatus(): {
     connected: boolean;
     running: boolean;

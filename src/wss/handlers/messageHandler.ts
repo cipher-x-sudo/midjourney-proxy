@@ -12,6 +12,7 @@ import {
   TASK_PROPERTY_MESSAGE_HASH,
   TASK_PROPERTY_FLAGS,
   MJ_MESSAGE_HANDLED,
+  TASK_PROPERTY_SEED,
 } from '../../constants';
 
 /**
@@ -122,13 +123,13 @@ export abstract class MessageHandler {
     if (imageUrl) {
       task.imageUrl = imageUrl;
     }
-    this.finishTask(task, message);
+    this.finishTask(instance, task, message);
   }
 
   /**
    * Finish task
    */
-  protected finishTask(task: Task, message: any): void {
+  protected finishTask(instance: DiscordInstance, task: Task, message: any): void {
     if (message.id) {
       task.setProperty(TASK_PROPERTY_MESSAGE_ID, message.id);
     }
@@ -140,6 +141,22 @@ export abstract class MessageHandler {
       }
     }
     task.success();
+
+    // Automatically react with envelope emoji to request seed
+    if (task.imageUrl && message.id) {
+      const messageId = task.getProperty(TASK_PROPERTY_MESSAGE_ID) || message.id;
+      const channelId = instance.account().channelId;
+      
+      // Only react if we have both messageId and channelId
+      if (messageId && channelId) {
+        const envelopeEmoji = '\u{1F4E7}'; // ✉️ envelope emoji
+        
+        // Fire-and-forget: react with envelope emoji (don't await, don't block)
+        instance.reactWithEmoji(messageId, channelId, envelopeEmoji).catch((error: any) => {
+          console.warn(`[message-handler] Failed to react with envelope emoji for task ${task.id}:`, error.message);
+        });
+      }
+    }
   }
 
   /**

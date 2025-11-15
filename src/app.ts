@@ -172,6 +172,12 @@ export async function createApp(): Promise<FastifyInstance> {
     return taskController.listByIds(request as any, reply);
   });
 
+  app.get(`${apiPrefix}/task/:id/image-seed`, {
+    preHandler: authMiddleware,
+  }, async (request, reply) => {
+    return taskController.imageSeed(request as any, reply);
+  });
+
   // Account routes
   app.get(`${apiPrefix}/account/:id/fetch`, {
     preHandler: authMiddleware,

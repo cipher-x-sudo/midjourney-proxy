@@ -87,7 +87,7 @@ export class UpscaleSuccessHandler extends MessageHandler {
     if (imageUrl) {
       task.imageUrl = imageUrl;
     }
-    this.finishTask(task, message);
+    this.finishTask(instance, task, message);
   }
 
   private getReferencedMessageId(message: any): string {
