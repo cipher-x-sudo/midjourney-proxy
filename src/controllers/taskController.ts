@@ -78,16 +78,20 @@ export class TaskController {
     
     // Check queue tasks first
     const queueTasks = this.discordLoadBalancer.getQueueTasks();
+    const queueTaskIds = queueTasks.map(t => t.id);
+    console.log(`[task-controller] Checking queue tasks (${queueTasks.length} total): ${queueTaskIds.join(', ')}`);
     let task = queueTasks.find(t => t.id === id);
+    const foundInQueue = !!task;
+    console.log(`[task-controller] Task ${id} in queue tasks: ${foundInQueue ? 'FOUND' : 'NOT FOUND'}`);
     
     // Then check stored tasks
     if (!task) {
+      console.log(`[task-controller] Checking stored tasks for task ${id}`);
       task = await this.taskStoreService.get(id);
-      if (task) {
-        console.log(`[task-controller] Task ${id} found in stored tasks`);
-      }
+      const foundInStore = !!task;
+      console.log(`[task-controller] Task ${id} in stored tasks: ${foundInStore ? 'FOUND' : 'NOT FOUND'}`);
     } else {
-      console.log(`[task-controller] Task ${id} found in queue tasks`);
+      console.log(`[task-controller] Skipping stored tasks check (task already found in queue)`);
     }
 
     // Task not found
