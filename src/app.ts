@@ -135,6 +135,12 @@ export async function createApp(): Promise<FastifyInstance> {
     return submitController.describe(request as any, reply);
   });
 
+  app.post(`${apiPrefix}/submit/shorten`, {
+    preHandler: authMiddleware,
+  }, async (request, reply) => {
+    return submitController.shorten(request as any, reply);
+  });
+
   app.post(`${apiPrefix}/submit/blend`, {
     preHandler: authMiddleware,
   }, async (request, reply) => {

@@ -286,6 +286,10 @@ export class DiscordInstanceImpl implements DiscordInstance {
     return this.service.describe(finalFileName, nonce);
   }
 
+  async shorten(prompt: string, nonce: string): Promise<Message<void>> {
+    return this.service.shorten(prompt, nonce);
+  }
+
   async blend(finalFileNames: string[], dimensions: BlendDimensions, nonce: string): Promise<Message<void>> {
     return this.service.blend(finalFileNames, dimensions, nonce);
   }

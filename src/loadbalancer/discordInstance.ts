@@ -29,6 +29,7 @@ export interface DiscordInstance {
   variation(messageId: string, index: number, messageHash: string, messageFlags: number, nonce: string): Promise<Message<void>>;
   reroll(messageId: string, messageHash: string, messageFlags: number, nonce: string): Promise<Message<void>>;
   describe(finalFileName: string, nonce: string): Promise<Message<void>>;
+  shorten(prompt: string, nonce: string): Promise<Message<void>>;
   blend(finalFileNames: string[], dimensions: BlendDimensions, nonce: string): Promise<Message<void>>;
   upload(fileName: string, dataUrl: DataUrl): Promise<Message<string>>;
   sendImageMessage(content: string, finalFileName: string): Promise<Message<string>>;

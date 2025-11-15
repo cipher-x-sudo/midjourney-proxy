@@ -19,6 +19,7 @@ export interface TaskService {
   submitVariation(task: Task, targetMessageId: string, targetMessageHash: string, index: number, messageFlags: number): Promise<SubmitResultVO>;
   submitReroll(task: Task, targetMessageId: string, targetMessageHash: string, messageFlags: number): Promise<SubmitResultVO>;
   submitDescribe(task: Task, dataUrl: DataUrl): Promise<SubmitResultVO>;
+  submitShorten(task: Task): Promise<SubmitResultVO>;
   submitBlend(task: Task, dataUrls: DataUrl[], dimensions: BlendDimensions): Promise<SubmitResultVO>;
 }
 
@@ -136,6 +137,20 @@ export class TaskServiceImpl implements TaskService {
       const finalFileName = uploadResult.getResult()!;
       const nonce = task.getProperty(TASK_PROPERTY_NONCE);
       return discordInstance.describe(finalFileName, nonce || '');
+    });
+  }
+
+  async submitShorten(task: Task): Promise<SubmitResultVO> {
+    const discordInstance = this.discordLoadBalancer.chooseInstance();
+    if (!discordInstance) {
+      return SubmitResultVO.fail(ReturnCode.NOT_FOUND, 'No available account instance');
+    }
+
+    task.setProperty(TASK_PROPERTY_DISCORD_INSTANCE_ID, discordInstance.getInstanceId());
+
+    return discordInstance.submitTask(task, () => {
+      const nonce = task.getProperty(TASK_PROPERTY_NONCE);
+      return discordInstance.shorten(task.promptEn || task.prompt || '', nonce || '');
     });
   }
 

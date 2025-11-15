@@ -15,6 +15,7 @@ export interface DiscordService {
   variation(messageId: string, index: number, messageHash: string, messageFlags: number, nonce: string): Promise<Message<void>>;
   reroll(messageId: string, messageHash: string, messageFlags: number, nonce: string): Promise<Message<void>>;
   describe(finalFileName: string, nonce: string): Promise<Message<void>>;
+  shorten(prompt: string, nonce: string): Promise<Message<void>>;
   blend(finalFileNames: string[], dimensions: BlendDimensions, nonce: string): Promise<Message<void>>;
   upload(fileName: string, dataUrl: DataUrl): Promise<Message<string>>;
   sendImageMessage(content: string, finalFileName: string): Promise<Message<string>>;
@@ -174,6 +175,13 @@ export class DiscordServiceImpl implements DiscordService {
       .replace('$file_name', fileName)
       .replace('$final_file_name', finalFileName);
     return this.postJsonAndCheckStatus(paramsStr);
+  }
+
+  async shorten(prompt: string, nonce: string): Promise<Message<void>> {
+    const paramsStr = this.replaceInteractionParams(this.paramsMap.get('shorten'), nonce);
+    const params = JSON.parse(paramsStr);
+    params.data.options[0].value = prompt;
+    return this.postJsonAndCheckStatus(JSON.stringify(params));
   }
 
   async blend(finalFileNames: string[], dimensions: BlendDimensions, nonce: string): Promise<Message<void>> {

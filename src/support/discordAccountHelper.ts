@@ -12,6 +12,7 @@ import { UpscaleSuccessHandler } from '../wss/handlers/upscaleSuccessHandler';
 import { VariationSuccessHandler } from '../wss/handlers/variationSuccessHandler';
 import { RerollSuccessHandler } from '../wss/handlers/rerollSuccessHandler';
 import { DescribeSuccessHandler } from '../wss/handlers/describeSuccessHandler';
+import { ShortenSuccessHandler } from '../wss/handlers/shortenSuccessHandler';
 import { BlendSuccessHandler } from '../wss/handlers/blendSuccessHandler';
 import { StartAndProgressHandler } from '../wss/handlers/startAndProgressHandler';
 import { ErrorMessageHandler } from '../wss/handlers/errorMessageHandler';
@@ -104,7 +105,7 @@ export class DiscordAccountHelper {
     const paramsDir = path.join(__dirname, '../../resources/api-params');
 
     try {
-      const files = ['imagine.json', 'upscale.json', 'variation.json', 'reroll.json', 'describe.json', 'blend.json', 'message.json'];
+      const files = ['imagine.json', 'upscale.json', 'variation.json', 'reroll.json', 'describe.json', 'shorten.json', 'blend.json', 'message.json'];
       for (const file of files) {
         const filePath = path.join(paramsDir, file);
         if (fs.existsSync(filePath)) {
@@ -128,6 +129,7 @@ export class DiscordAccountHelper {
       new ErrorMessageHandler(this.discordHelper),
       new CaptchaEmbeddedHandler(this.discordHelper),
       new DescribeSuccessHandler(this.discordHelper),
+      new ShortenSuccessHandler(this.discordHelper),
       new BlendSuccessHandler(this.discordHelper),
       new StartAndProgressHandler(this.discordHelper),
       new ImagineSuccessHandler(this.discordHelper),

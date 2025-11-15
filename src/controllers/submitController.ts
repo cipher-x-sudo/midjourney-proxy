@@ -8,6 +8,7 @@ import { SubmitImagineDTO } from '../dto/SubmitImagineDTO';
 import { SubmitChangeDTO } from '../dto/SubmitChangeDTO';
 import { SubmitSimpleChangeDTO } from '../dto/SubmitSimpleChangeDTO';
 import { SubmitDescribeDTO } from '../dto/SubmitDescribeDTO';
+import { SubmitShortenDTO } from '../dto/SubmitShortenDTO';
 import { SubmitBlendDTO } from '../dto/SubmitBlendDTO';
 import { TaskService } from '../services/taskService';
 import { TaskStoreService } from '../services/store/taskStoreService';
@@ -186,6 +187,25 @@ export class SubmitController {
     const taskFileName = `${task.id}.${guessFileSuffix(dataUrl.mimeType) || 'png'}`;
     task.description = `/describe ${taskFileName}`;
     return this.taskService.submitDescribe(task, dataUrl);
+  }
+
+  async shorten(request: FastifyRequest<{ Body: SubmitShortenDTO }>, reply: FastifyReply): Promise<SubmitResultVO> {
+    const shortenDTO = request.body;
+    let prompt = shortenDTO.prompt;
+
+    if (!prompt || prompt.trim().length === 0) {
+      return SubmitResultVO.fail(ReturnCode.VALIDATION_ERROR, 'prompt cannot be empty');
+    }
+
+    prompt = prompt.trim();
+    const task = this.newTask(shortenDTO);
+    task.action = TaskAction.SHORTEN;
+    task.prompt = prompt;
+
+    const promptEn = await this.translatePrompt(prompt);
+    task.promptEn = promptEn;
+    task.description = `/shorten ${prompt}`;
+    return this.taskService.submitShorten(task);
   }
 
   async blend(request: FastifyRequest<{ Body: SubmitBlendDTO }>, reply: FastifyReply): Promise<SubmitResultVO> {

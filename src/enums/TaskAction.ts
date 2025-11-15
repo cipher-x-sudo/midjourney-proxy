@@ -12,6 +12,8 @@ export enum TaskAction {
   REROLL = 'REROLL',
   /** Image to prompt */
   DESCRIBE = 'DESCRIBE',
+  /** Analyze and optimize prompt */
+  SHORTEN = 'SHORTEN',
   /** Blend multiple images */
   BLEND = 'BLEND',
 }
