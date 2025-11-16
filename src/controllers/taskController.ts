@@ -87,6 +87,24 @@ export class TaskController {
     // Then check stored tasks
     if (!task) {
       console.log(`[task-controller] [3] Checking stored tasks for task ${id}...`);
+      
+      // Debug: List recent stored tasks to help diagnose
+      try {
+        const allStoredTasks = await this.taskStoreService.list();
+        const recentStoredTasks = allStoredTasks
+          .filter(t => t.finishTime && (Date.now() - t.finishTime) < 600000) // Last 10 minutes
+          .sort((a, b) => (b.finishTime || 0) - (a.finishTime || 0))
+          .slice(0, 10); // Show up to 10 most recent
+        
+        console.log(`[task-controller] [3a] Recent stored tasks (last 10 min, max 10): ${recentStoredTasks.length} found`);
+        if (recentStoredTasks.length > 0) {
+          const recentTaskIds = recentStoredTasks.map(t => `${t.id} (completed: ${t.finishTime ? new Date(t.finishTime).toISOString() : 'N/A'})`);
+          console.log(`[task-controller] [3b] Recent task IDs: ${recentTaskIds.join(', ')}`);
+        }
+      } catch (error) {
+        console.warn(`[task-controller] [3c] Error listing stored tasks for debugging:`, error);
+      }
+      
       const storedTask = await this.taskStoreService.get(id);
       task = storedTask;
       const foundInStore = !!task;
