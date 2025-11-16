@@ -310,7 +310,7 @@ export class TaskServiceImpl implements TaskService {
 
     // Return success with task ID
     console.log(`[task-service] submitEdits - SUCCESS - Task ${task.id} submitted successfully`);
-    return SubmitResultVO.success(task.id!);
+    return SubmitResultVO.of(ReturnCode.SUCCESS, 'Success', task.id!);
   }
 }
 
