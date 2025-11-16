@@ -630,7 +630,7 @@ export class DiscordServiceImpl implements DiscordService {
           if (iframeData) {
             console.log(`[discord-service-${this.account.getDisplay()}] extractIframeCustomId - SUCCESS - Found iframe data in ${location}: custom_id=${iframeData.custom_id.substring(0, 50)}...`);
             return iframeData;
-          }
+              }
             }
             
             // Check if custom_id itself is an iframe custom_id
@@ -638,10 +638,10 @@ export class DiscordServiceImpl implements DiscordService {
               const location = `component[${i}].components[${j}].custom_id`;
               checkedLocations.push(location);
               console.log(`[discord-service-${this.account.getDisplay()}] extractIframeCustomId - Checking ${location}: ${subComponent.custom_id.substring(0, 100)}${subComponent.custom_id.length > 100 ? '...' : ''}`);
-                    if (subComponent.custom_id.includes('MJ::iframe::')) {
+              if (subComponent.custom_id.includes('MJ::iframe::')) {
                       console.log(`[discord-service-${this.account.getDisplay()}] extractIframeCustomId - SUCCESS - Found iframe custom_id directly in ${location}: ${subComponent.custom_id}`);
                       return { custom_id: subComponent.custom_id };
-                    }
+              }
             }
             
                   // Check subComponent data/metadata
@@ -691,7 +691,7 @@ export class DiscordServiceImpl implements DiscordService {
             if (iframeData) {
               console.log(`[discord-service-${this.account.getDisplay()}] extractIframeCustomId - SUCCESS - Found iframe data in ${location}: custom_id=${iframeData.custom_id.substring(0, 50)}...`);
               return iframeData;
-            }
+      }
     } else {
       console.log(`[discord-service-${this.account.getDisplay()}] extractIframeCustomId - No message.content or content is not a string`);
     }

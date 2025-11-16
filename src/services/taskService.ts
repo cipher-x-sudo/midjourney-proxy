@@ -253,7 +253,7 @@ export class TaskServiceImpl implements TaskService {
       iframeData = await discordInstance.waitForIframeCustomId(messageId, waitTimeoutMs);
       const waitElapsed = Date.now() - waitStartTime;
       const totalElapsed = waitElapsed + buttonClickElapsed;
-      
+
       console.log(`[task-service] submitEdits - Step 2: SUCCESS - Received iframe data via WebSocket: custom_id=${iframeData.custom_id.substring(0, 50)}..., instance_id=${iframeData.instance_id ? 'present' : 'missing'}, frame_id=${iframeData.frame_id || 'missing'} (${waitElapsed}ms wait, ${totalElapsed}ms total since button click)`);
     } catch (error: any) {
       const waitElapsed = Date.now() - waitStartTime;
