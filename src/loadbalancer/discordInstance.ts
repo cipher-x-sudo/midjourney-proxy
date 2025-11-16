@@ -38,6 +38,7 @@ export interface DiscordInstance {
   customAction(messageId: string, messageFlags: number, customId: string, nonce: string): Promise<Message<void>>;
   modalSubmit(taskId: string, fields: { prompt?: string; maskBase64?: string }, nonce: string): Promise<Message<void>>;
   edits(messageId: string, customId: string, nonce: string): Promise<Message<void>>;
+  submitInpaint(customId: string, maskBase64: string, prompt: string): Promise<Message<void>>;
 
   // Connection status
   getConnectionStatus(): {

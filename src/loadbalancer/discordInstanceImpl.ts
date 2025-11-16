@@ -387,6 +387,13 @@ export class DiscordInstanceImpl implements DiscordInstance {
     throw new Error('edits not implemented');
   }
 
+  async submitInpaint(customId: string, maskBase64: string, prompt: string): Promise<Message<void>> {
+    if (this.service.submitInpaint) {
+      return this.service.submitInpaint(customId, maskBase64, prompt);
+    }
+    throw new Error('submitInpaint not implemented');
+  }
+
   getConnectionStatus(): {
     connected: boolean;
     running: boolean;

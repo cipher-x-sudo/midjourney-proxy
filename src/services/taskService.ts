@@ -279,15 +279,15 @@ export class TaskServiceImpl implements TaskService {
       // The WebSocket handler will need to:
       // 1. Wait for the grid message from the imagine command
       // 2. Extract the inpaint button custom_id (format: "MJ::Inpaint::1::<hash>::SOLO")
-      // 3. Click the button using customAction
-      // 4. This will return a modal taskId
-      // 5. Submit the modal with maskBase64 and prompt
+      // 3. Call submitInpaint with customId, mask, and prompt using the direct API
+      //    POST https://936929561302675456.discordsays.com/.proxy/inpaint/api/submit-job
       task.setProperty('edits_mask_base64', maskBase64);
       task.setProperty('edits_prompt', prompt);
       task.setProperty('edits_mask_filename', maskFinalFileName);
+      task.setProperty('edits_use_direct_api', 'true'); // Flag to use direct API
       
       // The task will be completed when the WebSocket handler processes the grid message
-      // and completes the inpaint flow
+      // extracts the inpaint button customId, and calls submitInpaint
       return Message.success<void>();
     });
   }

@@ -24,6 +24,7 @@ export interface DiscordService {
   customAction(messageId: string, messageFlags: number, customId: string, nonce: string): Promise<Message<void>>;
   modalSubmit(taskId: string, fields: { prompt?: string; maskBase64?: string }, nonce: string): Promise<Message<void>>;
   edits(messageId: string, customId: string, nonce: string): Promise<Message<void>>;
+  submitInpaint(customId: string, maskBase64: string, prompt: string): Promise<Message<void>>;
 }
 
 /**
@@ -270,6 +271,57 @@ export class DiscordServiceImpl implements DiscordService {
     }
 
     return Message.failureWithDescription<void>('Edits template not found');
+  }
+
+  async submitInpaint(customId: string, maskBase64: string, prompt: string): Promise<Message<void>> {
+    try {
+      // Extract raw base64 from data URL if needed
+      let maskData = maskBase64;
+      if (maskBase64.startsWith('data:')) {
+        const base64Match = maskBase64.match(/base64,(.+)$/);
+        if (base64Match) {
+          maskData = base64Match[1];
+        }
+      }
+
+      // Call the direct inpaint API endpoint
+      const inpaintUrl = `https://936929561302675456.discordsays.com/.proxy/inpaint/api/submit-job`;
+      
+      const payload = {
+        username: '0',
+        userId: '0',
+        customId: customId,
+        mask: maskData,
+        prompt: prompt,
+        full_prompt: null
+      };
+
+      const response = await this.httpClient.post(inpaintUrl, payload, {
+        headers: {
+          'Authorization': this.account.userToken,
+          'Content-Type': 'application/json',
+          'User-Agent': this.account.userAgent || 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+        },
+      });
+
+      if (response.status === 200 || response.status === 201) {
+        console.debug(`[discord-service-${this.account.getDisplay()}] Inpaint job submitted successfully`);
+        return Message.success<void>();
+      }
+      
+      console.warn(`[discord-service-${this.account.getDisplay()}] Inpaint submission failed - HTTP ${response.status}`);
+      return Message.failureWithDescription<void>(`HTTP ${response.status}`);
+    } catch (error: any) {
+      if (error.response) {
+        const status = error.response.status;
+        const statusText = error.response.statusText;
+        const errorData = error.response.data;
+        console.error(`[discord-service-${this.account.getDisplay()}] Inpaint API error - HTTP ${status}: ${statusText}`, errorData);
+        return Message.failureWithDescription<void>(`HTTP ${status}: ${statusText}`);
+      }
+      console.error(`[discord-service-${this.account.getDisplay()}] Inpaint request error:`, error.message);
+      return Message.failureWithDescription<void>(error.message);
+    }
   }
 
   async upload(fileName: string, dataUrl: DataUrl): Promise<Message<string>> {
