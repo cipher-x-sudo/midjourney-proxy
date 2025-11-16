@@ -9,7 +9,7 @@ import { BlendDimensions } from '../enums/BlendDimensions';
 import { DataUrl } from '../utils/convertUtils';
 import { TaskStoreService } from '../services/store/taskStoreService';
 import { NotifyService } from '../services/notifyService';
-import { DiscordService, DiscordServiceImpl } from '../services/discordService';
+import { DiscordService, DiscordServiceImpl, IframeData } from '../services/discordService';
 import { DiscordGateway, ResumeData } from '../wss/discordGateway';
 import { UserMessageListener } from '../wss/userMessageListener';
 import { DiscordHelper } from '../support/discordHelper';
