@@ -200,27 +200,34 @@ export class SeedDmHandler extends MessageHandler {
       const allStoredTasks = await this.taskStoreService.list();
       console.log(`[seed-dm-handler-${instanceId}] Fetched ${allStoredTasks.length} total stored tasks`);
       
-      // Filter for recently completed tasks from this instance
-      const recentCompletedTasks = allStoredTasks.filter(task => {
-        // Must be from this instance
-        const taskInstanceId = task.getProperty(TASK_PROPERTY_DISCORD_INSTANCE_ID);
-        if (taskInstanceId !== instanceId) {
-          return false;
-        }
-        
+      // Filter for recently completed tasks; prefer same-instance but include unknown instance as fallback
+      const candidates = allStoredTasks.filter(task => {
         // Must have finish time (imageUrl not required for stored tasks)
         if (!task.finishTime) {
           return false;
         }
-        
         // Must be completed within time window
         const timeDiff = Math.abs(messageTimestamp - task.finishTime);
-        return timeDiff <= SeedDmHandler.SEED_MATCH_TIME_WINDOW && 
-               task.status === TaskStatus.SUCCESS;
+        if (!(timeDiff <= SeedDmHandler.SEED_MATCH_TIME_WINDOW && task.status === TaskStatus.SUCCESS)) {
+          return false;
+        }
+        // Keep tasks from same instance or tasks without instance id (legacy)
+        const taskInstanceId = task.getProperty(TASK_PROPERTY_DISCORD_INSTANCE_ID);
+        return taskInstanceId === instanceId || taskInstanceId === undefined || taskInstanceId === null;
+      });
+
+      // Sort: same-instance first, then by finishTime desc
+      candidates.sort((a, b) => {
+        const aInst = a.getProperty(TASK_PROPERTY_DISCORD_INSTANCE_ID) === instanceId ? 1 : 0;
+        const bInst = b.getProperty(TASK_PROPERTY_DISCORD_INSTANCE_ID) === instanceId ? 1 : 0;
+        if (bInst !== aInst) {
+          return bInst - aInst;
+        }
+        return (b.finishTime || 0) - (a.finishTime || 0);
       });
       
-      console.log(`[seed-dm-handler-${instanceId}] Filtered to ${recentCompletedTasks.length} recently completed tasks from this instance`);
-      return recentCompletedTasks;
+      console.log(`[seed-dm-handler-${instanceId}] Filtered to ${candidates.length} recently completed tasks (same-instance prioritized)`);
+      return candidates;
     } catch (error) {
       console.error(`[seed-dm-handler-${instance.getInstanceId()}] Error getting stored tasks:`, error);
       return [];

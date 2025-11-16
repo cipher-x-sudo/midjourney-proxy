@@ -170,6 +170,8 @@ export class DiscordInstanceImpl implements DiscordInstance {
     
     // Save task
     try {
+      // Ensure task is stamped with instance id for later correlation (e.g., seed DM matching)
+      task.setProperty(TASK_PROPERTY_DISCORD_INSTANCE_ID, this.getInstanceId());
       console.log(`[discord-instance-${this.accountData.getDisplay()}] Saving task ${taskId} to store...`);
       await this.taskStoreService.save(task);
       console.log(`[discord-instance-${this.accountData.getDisplay()}] Successfully saved task ${taskId} to store`);
@@ -279,6 +281,10 @@ export class DiscordInstanceImpl implements DiscordInstance {
     const taskStatus = task.status || 'UNKNOWN';
     
     try {
+      // Ensure instance id property persists across updates
+      if (!task.getProperty(TASK_PROPERTY_DISCORD_INSTANCE_ID)) {
+        task.setProperty(TASK_PROPERTY_DISCORD_INSTANCE_ID, this.getInstanceId());
+      }
       console.log(`[discord-instance-${this.accountData.getDisplay()}] saveAndNotify: Saving task ${taskId}, Status: ${taskStatus}`);
       await this.taskStoreService.save(task);
       console.log(`[discord-instance-${this.accountData.getDisplay()}] saveAndNotify: Successfully saved task ${taskId}`);
