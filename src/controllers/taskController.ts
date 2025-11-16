@@ -88,21 +88,33 @@ export class TaskController {
     if (!task) {
       console.log(`[task-controller] [3] Checking stored tasks for task ${id}...`);
       
-      // Debug: List recent stored tasks to help diagnose
+      // Debug: List all stored tasks to help diagnose
       try {
         const allStoredTasks = await this.taskStoreService.list();
-        const recentStoredTasks = allStoredTasks
-          .filter(t => t.finishTime && (Date.now() - t.finishTime) < 600000) // Last 10 minutes
-          .sort((a, b) => (b.finishTime || 0) - (a.finishTime || 0))
-          .slice(0, 10); // Show up to 10 most recent
+        console.log(`[task-controller] [3a] Total stored tasks: ${allStoredTasks.length}`);
         
-        console.log(`[task-controller] [3a] Recent stored tasks (last 10 min, max 10): ${recentStoredTasks.length} found`);
-        if (recentStoredTasks.length > 0) {
-          const recentTaskIds = recentStoredTasks.map(t => `${t.id} (completed: ${t.finishTime ? new Date(t.finishTime).toISOString() : 'N/A'})`);
-          console.log(`[task-controller] [3b] Recent task IDs: ${recentTaskIds.join(', ')}`);
+        if (allStoredTasks.length > 0) {
+          // Sort by finish time (most recent first), or submit time if no finish time
+          const sortedTasks = allStoredTasks.sort((a, b) => {
+            const aTime = a.finishTime || a.submitTime || 0;
+            const bTime = b.finishTime || b.submitTime || 0;
+            return bTime - aTime;
+          });
+          
+          // Show all tasks with their details
+          console.log(`[task-controller] [3b] All stored task IDs:`);
+          sortedTasks.forEach((t, index) => {
+            const submitTime = t.submitTime ? new Date(t.submitTime).toISOString() : 'N/A';
+            const finishTime = t.finishTime ? new Date(t.finishTime).toISOString() : 'N/A';
+            const status = t.status || 'UNKNOWN';
+            const age = t.finishTime ? Math.round((Date.now() - t.finishTime) / 1000) : (t.submitTime ? Math.round((Date.now() - t.submitTime) / 1000) : 0);
+            console.log(`[task-controller] [3b-${index + 1}] ID: ${t.id}, Status: ${status}, Submitted: ${submitTime}, Finished: ${finishTime}, Age: ${age}s`);
+          });
+        } else {
+          console.log(`[task-controller] [3b] No stored tasks found`);
         }
       } catch (error) {
-        console.warn(`[task-controller] [3c] Error listing stored tasks for debugging:`, error);
+        console.error(`[task-controller] [3c] Error listing stored tasks for debugging:`, error);
       }
       
       const storedTask = await this.taskStoreService.get(id);
