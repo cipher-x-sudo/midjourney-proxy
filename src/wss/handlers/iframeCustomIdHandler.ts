@@ -63,14 +63,31 @@ export class IframeCustomIdHandler extends MessageHandler {
       // The interaction might have custom_id directly, or in data.url, or in data.custom_id
       let iframeData = null;
       
-      // Check for custom_id in various locations
-      if (message.url && typeof message.url === 'string') {
-        // Extract from URL if present (this will get all three: custom_id, instance_id, frame_id)
-        console.log(`[iframe-custom-id-handler-${instance.getInstanceId()}] Checking message.url for iframe data: ${message.url.substring(0, 200)}`);
-        iframeData = instance.extractIframeCustomId({ content: message.url });
-      } else {
-        // Try recursive extraction from the entire interaction object
-        console.log(`[iframe-custom-id-handler-${instance.getInstanceId()}] Attempting recursive extraction from interaction object`);
+      // First, try to find URL in common locations (URL extraction gets all three values)
+      const urlLocations = [
+        message.url,
+        message.data?.url,
+        message.data?.iframeUrl,
+        message.data?.iframe_url,
+        message.iframeUrl,
+        message.iframe_url,
+        message.src,
+        message.href,
+      ];
+      
+      for (const url of urlLocations) {
+        if (url && typeof url === 'string' && url.includes('discordsays.com')) {
+          console.log(`[iframe-custom-id-handler-${instance.getInstanceId()}] Found URL in interaction event: ${url.substring(0, 200)}`);
+          iframeData = instance.extractIframeCustomId({ content: url });
+          if (iframeData) {
+            break;
+          }
+        }
+      }
+      
+      // If no URL found, try recursive extraction from the entire interaction object
+      if (!iframeData) {
+        console.log(`[iframe-custom-id-handler-${instance.getInstanceId()}] No URL found in common locations, attempting recursive extraction from interaction object`);
         iframeData = instance.extractIframeCustomId(message);
       }
       

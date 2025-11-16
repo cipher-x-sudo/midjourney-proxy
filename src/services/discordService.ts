@@ -731,9 +731,10 @@ export class DiscordServiceImpl implements DiscordService {
    * Recursively search an object for iframe data
    * @param obj Object to search
    * @param depth Current recursion depth (max 5 to prevent infinite loops)
+   * @param parentObj Parent object to search for URLs when custom_id is found
    * @returns IframeData object if found, null otherwise
    */
-  private extractIframeDataFromObject(obj: any, depth: number = 0): IframeData | null {
+  private extractIframeDataFromObject(obj: any, depth: number = 0, parentObj?: any): IframeData | null {
     if (depth > 5 || !obj || typeof obj !== 'object') {
       return null;
     }
@@ -744,6 +745,13 @@ export class DiscordServiceImpl implements DiscordService {
         // Extract the full custom_id - matches alphanumeric, hyphens, underscores, and other URL-safe chars
         const match = obj.match(/MJ::iframe::[A-Za-z0-9_.-]+/);
         if (match) {
+          // If we found custom_id in a string, try to find URL in parent object
+          if (parentObj) {
+            const urlData = this.findUrlInObject(parentObj);
+            if (urlData) {
+              return urlData; // URL extraction will have all three values
+            }
+          }
           return { custom_id: match[0] };
         }
       }
@@ -751,29 +759,7 @@ export class DiscordServiceImpl implements DiscordService {
       return this.extractIframeDataFromUrl(obj);
     }
 
-    // Check direct properties
-    if (obj.custom_id && typeof obj.custom_id === 'string' && obj.custom_id.includes('MJ::iframe::')) {
-      const iframeData: IframeData = { custom_id: obj.custom_id };
-      if (obj.instance_id) {
-        iframeData.instance_id = obj.instance_id;
-      }
-      if (obj.frame_id) {
-        iframeData.frame_id = obj.frame_id;
-      }
-      return iframeData;
-    }
-
-    if (obj.customid && typeof obj.customid === 'string' && obj.customid.includes('MJ::iframe::')) {
-      const iframeData: IframeData = { custom_id: obj.customid };
-      if (obj.instance_id) {
-        iframeData.instance_id = obj.instance_id;
-      }
-      if (obj.frame_id) {
-        iframeData.frame_id = obj.frame_id;
-      }
-      return iframeData;
-    }
-
+    // Check direct properties - prefer URL over custom_id (URL has all three values)
     if (obj.url && typeof obj.url === 'string') {
       const iframeData = this.extractIframeDataFromUrl(obj.url);
       if (iframeData) {
@@ -781,12 +767,65 @@ export class DiscordServiceImpl implements DiscordService {
       }
     }
 
+    // Check for custom_id in direct properties
+    if (obj.custom_id && typeof obj.custom_id === 'string' && obj.custom_id.includes('MJ::iframe::')) {
+      const iframeData: IframeData = { custom_id: obj.custom_id };
+      // Try to find URL in the same object or extract instance_id/frame_id from object properties
+      if (obj.url && typeof obj.url === 'string') {
+        const urlData = this.extractIframeDataFromUrl(obj.url);
+        if (urlData) {
+          return urlData; // URL extraction has all three values
+        }
+      }
+      // Also check for instance_id and frame_id as direct properties
+      if (obj.instance_id) {
+        iframeData.instance_id = obj.instance_id;
+      }
+      if (obj.frame_id) {
+        iframeData.frame_id = obj.frame_id;
+      }
+      // If we have custom_id but no URL, try to find URL in parent or sibling properties
+      if (!iframeData.instance_id || !iframeData.frame_id) {
+        const urlData = this.findUrlInObject(obj);
+        if (urlData) {
+          // Merge: use custom_id from obj, but instance_id and frame_id from URL
+          iframeData.instance_id = urlData.instance_id || iframeData.instance_id;
+          iframeData.frame_id = urlData.frame_id || iframeData.frame_id;
+        }
+      }
+      return iframeData;
+    }
+
+    if (obj.customid && typeof obj.customid === 'string' && obj.customid.includes('MJ::iframe::')) {
+      const iframeData: IframeData = { custom_id: obj.customid };
+      if (obj.url && typeof obj.url === 'string') {
+        const urlData = this.extractIframeDataFromUrl(obj.url);
+        if (urlData) {
+          return urlData;
+        }
+      }
+      if (obj.instance_id) {
+        iframeData.instance_id = obj.instance_id;
+      }
+      if (obj.frame_id) {
+        iframeData.frame_id = obj.frame_id;
+      }
+      if (!iframeData.instance_id || !iframeData.frame_id) {
+        const urlData = this.findUrlInObject(obj);
+        if (urlData) {
+          iframeData.instance_id = urlData.instance_id || iframeData.instance_id;
+          iframeData.frame_id = urlData.frame_id || iframeData.frame_id;
+        }
+      }
+      return iframeData;
+    }
+
     // Recursively search nested objects and arrays
     for (const key in obj) {
       if (obj.hasOwnProperty(key)) {
         const value = obj[key];
         if (value && typeof value === 'object') {
-          const result = this.extractIframeDataFromObject(value, depth + 1);
+          const result = this.extractIframeDataFromObject(value, depth + 1, obj);
           if (result) {
             return result;
           }
@@ -795,6 +834,11 @@ export class DiscordServiceImpl implements DiscordService {
             // Extract the full custom_id - matches alphanumeric, hyphens, underscores, and other URL-safe chars
             const match = value.match(/MJ::iframe::[A-Za-z0-9_.-]+/);
             if (match) {
+              // Found custom_id in a string value, try to find URL in the same object
+              const urlData = this.findUrlInObject(obj);
+              if (urlData) {
+                return urlData; // URL extraction has all three values
+              }
               return { custom_id: match[0] };
             }
           }
@@ -802,6 +846,64 @@ export class DiscordServiceImpl implements DiscordService {
           const iframeData = this.extractIframeDataFromUrl(value);
           if (iframeData) {
             return iframeData;
+          }
+        }
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Helper method to find iframe URL in an object (searches recursively but shallow)
+   * @param obj Object to search
+   * @returns IframeData from URL if found, null otherwise
+   */
+  private findUrlInObject(obj: any): IframeData | null {
+    if (!obj || typeof obj !== 'object') {
+      return null;
+    }
+
+    // Check direct properties
+    if (obj.url && typeof obj.url === 'string') {
+      const urlData = this.extractIframeDataFromUrl(obj.url);
+      if (urlData) {
+        return urlData;
+      }
+    }
+
+    // Check common URL property names
+    const urlProperties = ['src', 'href', 'iframeUrl', 'iframe_url', 'url', 'source'];
+    for (const prop of urlProperties) {
+      if (obj[prop] && typeof obj[prop] === 'string') {
+        const urlData = this.extractIframeDataFromUrl(obj[prop]);
+        if (urlData) {
+          return urlData;
+        }
+      }
+    }
+
+    // Check first level of nested objects/arrays (shallow search)
+    for (const key in obj) {
+      if (obj.hasOwnProperty(key)) {
+        const value = obj[key];
+        if (value && typeof value === 'object' && !Array.isArray(value)) {
+          // Check nested object's direct properties
+          if (value.url && typeof value.url === 'string') {
+            const urlData = this.extractIframeDataFromUrl(value.url);
+            if (urlData) {
+              return urlData;
+            }
+          }
+        } else if (Array.isArray(value)) {
+          // Check array items for URLs
+          for (const item of value) {
+            if (item && typeof item === 'object' && item.url && typeof item.url === 'string') {
+              const urlData = this.extractIframeDataFromUrl(item.url);
+              if (urlData) {
+                return urlData;
+              }
+            }
           }
         }
       }
