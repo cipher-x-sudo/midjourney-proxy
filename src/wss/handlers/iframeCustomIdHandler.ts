@@ -20,6 +20,38 @@ export class IframeCustomIdHandler extends MessageHandler {
   }
 
   /**
+   * Debug method to find all iframe URLs in an object
+   * Searches recursively through the object structure to find any URLs containing 'discordsays.com'
+   * @param instanceId Instance ID for logging
+   * @param obj Object to search
+   */
+  private debugFindIframeUrls(instanceId: string, obj: any): void {
+    const allUrls: string[] = [];
+    const findUrlsInObject = (searchObj: any, path: string = ''): void => {
+      if (!searchObj || typeof searchObj !== 'object') return;
+      for (const key in searchObj) {
+        if (searchObj.hasOwnProperty(key)) {
+          const value = searchObj[key];
+          const currentPath = path ? `${path}.${key}` : key;
+          if (typeof value === 'string' && value.includes('discordsays.com')) {
+            allUrls.push(`${currentPath}: ${value.substring(0, 200)}`);
+          } else if (value && typeof value === 'object') {
+            findUrlsInObject(value, currentPath);
+          }
+        }
+      }
+    };
+    findUrlsInObject(obj);
+    
+    if (allUrls.length > 0) {
+      console.log(`[iframe-custom-id-handler-${instanceId}] Found ${allUrls.length} iframe URL(s) in interaction event:`);
+      allUrls.forEach((url, idx) => console.log(`[iframe-custom-id-handler-${instanceId}]   iframe URL[${idx}]: ${url}`));
+    } else {
+      console.log(`[iframe-custom-id-handler-${instanceId}] No iframe URLs found in interaction event structure`);
+    }
+  }
+
+  /**
    * Handle message update events and interaction events to extract iframe custom_id
    */
   handle(instance: DiscordInstance, messageType: MessageType, message: any, eventType?: string): void {
@@ -57,7 +89,11 @@ export class IframeCustomIdHandler extends MessageHandler {
     // Handle INTERACTION_MODAL_CREATE or INTERACTION_IFRAME_MODAL_CREATE events
     if (eventTypeStr === 'INTERACTION_MODAL_CREATE' || eventTypeStr === 'INTERACTION_IFRAME_MODAL_CREATE') {
       console.log(`[iframe-custom-id-handler-${instance.getInstanceId()}] Received ${eventTypeStr} event`);
-      console.log(`[iframe-custom-id-handler-${instance.getInstanceId()}] Interaction event data structure:`, JSON.stringify(message).substring(0, 1000));
+      
+      // Debug: Find all iframe URLs in the interaction event
+      this.debugFindIframeUrls(instance.getInstanceId(), message);
+      
+      console.log(`[iframe-custom-id-handler-${instance.getInstanceId()}] Interaction event data structure:`, JSON.stringify(message).substring(0, 2000));
       
       // Extract iframe data from interaction data
       // The interaction might have custom_id directly, or in data.url, or in data.custom_id
