@@ -16,6 +16,7 @@ import { SubmitEditsDTO } from '../dto/SubmitEditsDTO';
 import { TaskService } from '../services/taskService';
 import { TaskStoreService } from '../services/store/taskStoreService';
 import { TranslateService } from '../services/translate/translateService';
+import { DiscordLoadBalancer } from '../loadbalancer/discordLoadBalancer';
 import { config } from '../config';
 import { BannedPromptException } from '../exceptions/BannedPromptException';
 import { checkBanned } from '../utils/bannedPromptUtils';
@@ -46,11 +47,13 @@ export class SubmitController {
   private taskService: TaskService;
   private taskStoreService: TaskStoreService;
   private translateService: TranslateService;
+  private discordLoadBalancer: DiscordLoadBalancer;
 
-  constructor(taskService: TaskService, taskStoreService: TaskStoreService, translateService: TranslateService) {
+  constructor(taskService: TaskService, taskStoreService: TaskStoreService, translateService: TranslateService, discordLoadBalancer: DiscordLoadBalancer) {
     this.taskService = taskService;
     this.taskStoreService = taskStoreService;
     this.translateService = translateService;
+    this.discordLoadBalancer = discordLoadBalancer;
   }
 
   async imagine(request: FastifyRequest<{ Body: SubmitImagineDTO }>, reply: FastifyReply): Promise<SubmitResultVO> {
@@ -285,7 +288,28 @@ export class SubmitController {
       return SubmitResultVO.fail(ReturnCode.VALIDATION_ERROR, 'taskId cannot be empty');
     }
 
-    const targetTask = await this.taskStoreService.get(modalDTO.taskId);
+    // First check queue tasks (tasks created by submitCustomAction may still be in memory)
+    let targetTask: Task | undefined;
+    const queueTasks = this.discordLoadBalancer.getQueueTasks();
+    targetTask = queueTasks.find((t: Task) => t.id === modalDTO.taskId);
+    
+    // Also check running tasks from all instances
+    if (!targetTask) {
+      const instances = this.discordLoadBalancer.getAllInstances();
+      for (const instance of instances) {
+        const runningTasks = instance.getRunningTasks();
+        targetTask = runningTasks.find((t: Task) => t.id === modalDTO.taskId);
+        if (targetTask) {
+          break;
+        }
+      }
+    }
+    
+    // If not found in queue or running tasks, check the task store
+    if (!targetTask) {
+      targetTask = await this.taskStoreService.get(modalDTO.taskId);
+    }
+    
     if (!targetTask) {
       return SubmitResultVO.fail(ReturnCode.NOT_FOUND, 'related task does not exist or has expired');
     }

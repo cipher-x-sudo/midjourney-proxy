@@ -93,7 +93,7 @@ export async function createApp(): Promise<FastifyInstance> {
   const taskService = new TaskServiceImpl(taskStoreService, discordLoadBalancer);
 
   // Create controllers
-  const submitController = new SubmitController(taskService, taskStoreService, translateService);
+  const submitController = new SubmitController(taskService, taskStoreService, translateService, discordLoadBalancer);
   const taskController = new TaskController(taskStoreService, discordLoadBalancer);
   const accountController = new AccountController(discordLoadBalancer);
 
