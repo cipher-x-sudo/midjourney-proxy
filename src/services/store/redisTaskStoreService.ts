@@ -23,6 +23,19 @@ export class RedisTaskStoreService implements TaskStoreService {
   }
 
   /**
+   * Deserialize task from plain object to Task instance
+   * This ensures the task has proper prototype chain with methods like getProperty()
+   */
+  private deserializeTask(plainObject: any): Task {
+    if (!plainObject) {
+      return plainObject;
+    }
+    const task = new Task();
+    Object.assign(task, plainObject);
+    return task;
+  }
+
+  /**
    * Save task
    */
   async save(task: Task): Promise<void> {
@@ -77,7 +90,8 @@ export class RedisTaskStoreService implements TaskStoreService {
       if (!data) {
         return undefined;
       }
-      return JSON.parse(data) as Task;
+      const plainObject = JSON.parse(data);
+      return this.deserializeTask(plainObject);
     });
   }
 
@@ -97,7 +111,10 @@ export class RedisTaskStoreService implements TaskStoreService {
       return this.redis.mget(...keys).then(values => {
         const tasks = values
           .filter((v): v is string => v !== null)
-          .map(v => JSON.parse(v) as Task);
+          .map(v => {
+            const plainObject = JSON.parse(v);
+            return this.deserializeTask(plainObject);
+          });
 
         if (condition) {
           return tasks.filter(condition);
