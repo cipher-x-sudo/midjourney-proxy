@@ -92,6 +92,7 @@ export class TaskController {
       try {
         const allStoredTasks = await this.taskStoreService.list();
         console.log(`[task-controller] [3a] Total stored tasks: ${allStoredTasks.length}`);
+        console.log(`[task-controller] [3a-check] TaskStoreService instance type: ${this.taskStoreService.constructor.name}`);
         
         if (allStoredTasks.length > 0) {
           // Sort by finish time (most recent first), or submit time if no finish time
@@ -101,6 +102,10 @@ export class TaskController {
             return bTime - aTime;
           });
           
+          // Check if requested task ID is in the list
+          const requestedTaskInList = sortedTasks.find(t => t.id === id);
+          console.log(`[task-controller] [3a-match] Requested task ${id} in stored tasks list: ${requestedTaskInList ? 'YES' : 'NO'}`);
+          
           // Show all tasks with their details
           console.log(`[task-controller] [3b] All stored task IDs:`);
           sortedTasks.forEach((t, index) => {
@@ -108,7 +113,8 @@ export class TaskController {
             const finishTime = t.finishTime ? new Date(t.finishTime).toISOString() : 'N/A';
             const status = t.status || 'UNKNOWN';
             const age = t.finishTime ? Math.round((Date.now() - t.finishTime) / 1000) : (t.submitTime ? Math.round((Date.now() - t.submitTime) / 1000) : 0);
-            console.log(`[task-controller] [3b-${index + 1}] ID: ${t.id}, Status: ${status}, Submitted: ${submitTime}, Finished: ${finishTime}, Age: ${age}s`);
+            const isRequested = t.id === id ? ' <-- REQUESTED' : '';
+            console.log(`[task-controller] [3b-${index + 1}] ID: ${t.id}, Status: ${status}, Submitted: ${submitTime}, Finished: ${finishTime}, Age: ${age}s${isRequested}`);
           });
         } else {
           console.log(`[task-controller] [3b] No stored tasks found`);
@@ -117,10 +123,14 @@ export class TaskController {
         console.error(`[task-controller] [3c] Error listing stored tasks for debugging:`, error);
       }
       
+      console.log(`[task-controller] [3d] Getting task ${id} from store...`);
       const storedTask = await this.taskStoreService.get(id);
       task = storedTask;
       const foundInStore = !!task;
       console.log(`[task-controller] [4] Task ${id} in stored tasks: ${foundInStore ? 'FOUND' : 'NOT FOUND'}`);
+      if (task) {
+        console.log(`[task-controller] [4-details] Found task ${id}, Status: ${task.status}, FinishTime: ${task.finishTime ? new Date(task.finishTime).toISOString() : 'N/A'}`);
+      }
     } else {
       console.log(`[task-controller] [3] Skipping stored tasks check (task already found in queue)`);
     }
