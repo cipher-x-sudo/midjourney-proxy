@@ -119,7 +119,8 @@ export class SeedDmHandler extends MessageHandler {
       // Log stored task candidates
       for (const task of storedTasks) {
         const timeDiff = Math.abs(messageTimestamp - (task.finishTime || 0));
-        console.log(`[seed-dm-handler-${instanceId}] Stored candidate task ${task.id}: finishTime=${task.finishTime ? new Date(task.finishTime).toISOString() : 'N/A'}, timeDiff=${timeDiff}ms, hasSeed=${!!task.getProperty(TASK_PROPERTY_SEED)}`);
+          const requestedAt = Number(task.getProperty('seedRequestedAt') || 0);
+          console.log(`[seed-dm-handler-${instanceId}] Stored candidate task ${task.id}: finishTime=${task.finishTime ? new Date(task.finishTime).toISOString() : 'N/A'}, timeDiff=${timeDiff}ms, seedRequestedAt=${requestedAt ? new Date(requestedAt).toISOString() : 'N/A'}, hasSeed=${!!task.getProperty(TASK_PROPERTY_SEED)}`);
       }
       
       // Filter out duplicates (tasks might be in both running and stored)
@@ -200,20 +201,27 @@ export class SeedDmHandler extends MessageHandler {
       const allStoredTasks = await this.taskStoreService.list();
       console.log(`[seed-dm-handler-${instanceId}] Fetched ${allStoredTasks.length} total stored tasks`);
       
-      // Filter for recently completed tasks; prefer same-instance but include unknown instance as fallback
+      // Filter for recently completed tasks OR tasks that recently requested seed; prefer same-instance but include unknown instance as fallback
+      const now = Date.now();
       const candidates = allStoredTasks.filter(task => {
-        // Must have finish time (imageUrl not required for stored tasks)
-        if (!task.finishTime) {
+        const isSuccess = task.status === TaskStatus.SUCCESS;
+        if (!isSuccess) {
           return false;
         }
-        // Must be completed within time window
-        const timeDiff = Math.abs(messageTimestamp - task.finishTime);
-        if (!(timeDiff <= SeedDmHandler.SEED_MATCH_TIME_WINDOW && task.status === TaskStatus.SUCCESS)) {
-          return false;
-        }
+
         // Keep tasks from same instance or tasks without instance id (legacy)
         const taskInstanceId = task.getProperty(TASK_PROPERTY_DISCORD_INSTANCE_ID);
-        return taskInstanceId === instanceId || taskInstanceId === undefined || taskInstanceId === null;
+        const sameOrUnknownInstance = taskInstanceId === instanceId || taskInstanceId === undefined || taskInstanceId === null;
+        if (!sameOrUnknownInstance) {
+          return false;
+        }
+
+        // Accept either: finished near the DM timestamp OR explicitly requested seed recently
+        const finishOk = !!task.finishTime && Math.abs(messageTimestamp - (task.finishTime || 0)) <= SeedDmHandler.SEED_MATCH_TIME_WINDOW;
+        const requestedAt = task.getProperty('seedRequestedAt') as number | undefined;
+        const requestedOk = typeof requestedAt === 'number' && (now - requestedAt) <= SeedDmHandler.SEED_MATCH_TIME_WINDOW;
+
+        return !!(finishOk || requestedOk);
       });
 
       // Sort: same-instance first, then by finishTime desc
