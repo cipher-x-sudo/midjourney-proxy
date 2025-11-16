@@ -286,6 +286,12 @@ export class DiscordServiceImpl implements DiscordService {
 
   async submitInpaint(customId: string, maskBase64: string, prompt: string): Promise<Message<void>> {
     try {
+      // Strip "MJ::iframe::" prefix from customId if present
+      let processedCustomId = customId;
+      if (processedCustomId.startsWith('MJ::iframe::')) {
+        processedCustomId = processedCustomId.replace('MJ::iframe::', '');
+      }
+
       // Extract raw base64 from data URL if needed
       let maskData = maskBase64;
       if (maskBase64.startsWith('data:')) {
@@ -295,13 +301,13 @@ export class DiscordServiceImpl implements DiscordService {
         }
       }
 
-      // Call the direct inpaint API endpoint
-      const inpaintUrl = `https://936929561302675456.discordsays.com/.proxy/inpaint/api/submit-job`;
+      // Call the direct inpaint API endpoint (without .proxy)
+      const inpaintUrl = `https://936929561302675456.discordsays.com/inpaint/api/submit-job`;
       
       const payload = {
         username: '0',
         userId: '0',
-        customId: customId,
+        customId: processedCustomId,
         mask: maskData,
         prompt: prompt,
         full_prompt: null

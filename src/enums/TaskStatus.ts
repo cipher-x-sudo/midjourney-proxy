@@ -12,6 +12,8 @@ export enum TaskStatus {
   FAILURE = 'FAILURE',
   /** Success */
   SUCCESS = 'SUCCESS',
+  /** Waiting for modal confirmation */
+  MODAL = 'MODAL',
 }
 
 /**
@@ -25,6 +27,8 @@ export function getTaskStatusOrder(status: TaskStatus): number {
       return 1;
     case TaskStatus.IN_PROGRESS:
       return 3;
+    case TaskStatus.MODAL:
+      return 2;
     case TaskStatus.FAILURE:
       return 4;
     case TaskStatus.SUCCESS:

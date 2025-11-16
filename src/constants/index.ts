@@ -35,6 +35,10 @@ export const TASK_PROPERTY_REFERENCED_MESSAGE_ID = 'referencedMessageId';
 export const TASK_PROPERTY_SEED = 'seed';
 export const TASK_PROPERTY_SEED_REQUESTED_AT = 'seedRequestedAt';
 export const TASK_PROPERTY_BUTTONS = 'buttons';
+export const TASK_PROPERTY_IFRAME_MODAL_CREATE_CUSTOM_ID = 'iframe_modal_custom_id';
+export const TASK_PROPERTY_REMIX_MODAL_MESSAGE_ID = 'remixModalMessageId';
+export const TASK_PROPERTY_INTERACTION_METADATA_ID = 'interactionMetadataId';
+export const TASK_PROPERTY_CUSTOM_ID = 'customId';
 
 /**
  * API secret header name

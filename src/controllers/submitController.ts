@@ -36,6 +36,7 @@ import {
   TASK_PROPERTY_MESSAGE_HASH,
   TASK_PROPERTY_REFERENCED_MESSAGE_ID,
   TASK_PROPERTY_BUTTONS,
+  TASK_PROPERTY_CUSTOM_ID,
 } from '../constants';
 
 /**
@@ -296,6 +297,10 @@ export class SubmitController {
     task.setProperty(TASK_PROPERTY_FINAL_PROMPT, targetTask.getProperty(TASK_PROPERTY_FINAL_PROMPT));
     task.setProperty(TASK_PROPERTY_PROGRESS_MESSAGE_ID, targetTask.getProperty(TASK_PROPERTY_MESSAGE_ID));
     task.setProperty(TASK_PROPERTY_DISCORD_INSTANCE_ID, targetTask.getProperty(TASK_PROPERTY_DISCORD_INSTANCE_ID));
+    // Copy properties needed for modal submission (especially for inpaint)
+    task.setProperty(TASK_PROPERTY_CUSTOM_ID, targetTask.getProperty(TASK_PROPERTY_CUSTOM_ID));
+    task.setProperty(TASK_PROPERTY_MESSAGE_ID, targetTask.getProperty(TASK_PROPERTY_MESSAGE_ID));
+    task.setProperty(TASK_PROPERTY_FLAGS, targetTask.getProperty(TASK_PROPERTY_FLAGS));
     task.description = `/modal ${modalDTO.taskId}`;
 
     return this.taskService.submitModal(task, {

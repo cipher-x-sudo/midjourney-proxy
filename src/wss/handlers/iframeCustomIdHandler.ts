@@ -2,6 +2,14 @@ import { MessageHandler } from './messageHandler';
 import { DiscordInstance } from '../../loadbalancer/discordInstance';
 import { MessageType } from '../../enums/MessageType';
 import { DiscordHelper } from '../../support/discordHelper';
+import { TaskStatus } from '../../enums/TaskStatus';
+import { 
+  TASK_PROPERTY_IFRAME_MODAL_CREATE_CUSTOM_ID,
+  TASK_PROPERTY_REMIX_MODAL_MESSAGE_ID,
+  TASK_PROPERTY_INTERACTION_METADATA_ID,
+  TASK_PROPERTY_MESSAGE_ID,
+  TASK_PROPERTY_CUSTOM_ID,
+} from '../../constants';
 
 /**
  * Handler for extracting iframe custom_id from WebSocket MESSAGE_UPDATE events
@@ -140,6 +148,75 @@ export class IframeCustomIdHandler extends MessageHandler {
         }
       } else {
         console.debug(`[iframe-result-${instance.getInstanceId()}] Checked ${eventTypeStr} event - no iframe data found`);
+      }
+      return;
+    }
+
+    // Handle INTERACTION_SUCCESS events (modal interaction success)
+    if (eventTypeStr === 'INTERACTION_SUCCESS') {
+      const interactionId = message.id || message.interaction?.id;
+      if (!interactionId) {
+        return;
+      }
+
+      // Find tasks that are waiting for modal data (MODAL status or inpaint actions)
+      const messageId = message.message?.id || message.message_id || message.data?.message_id;
+      const tasks = instance.findRunningTask((task) => {
+        // Find tasks with MODAL status or with customId starting with MJ::Inpaint::
+        if (task.status === TaskStatus.MODAL) {
+          // Match by stored message ID
+          const storedMessageId = task.getProperty(TASK_PROPERTY_MESSAGE_ID);
+          return storedMessageId === messageId;
+        }
+        const customId = task.getProperty(TASK_PROPERTY_CUSTOM_ID);
+        if (customId && customId.startsWith('MJ::Inpaint::')) {
+          const storedMessageId = task.getProperty(TASK_PROPERTY_MESSAGE_ID);
+          return storedMessageId === messageId;
+        }
+        return false;
+      });
+
+      if (tasks.length > 0) {
+        // Set interactionMetadataId and remixModalMessageId for all matching tasks
+        tasks.forEach((task) => {
+          task.setProperty(TASK_PROPERTY_INTERACTION_METADATA_ID, interactionId);
+          task.setProperty(TASK_PROPERTY_REMIX_MODAL_MESSAGE_ID, interactionId);
+          console.log(`[iframe-handler-${instance.getInstanceId()}] Set remixModalMessageId and interactionMetadataId for task ${task.id}: ${interactionId}`);
+        });
+      }
+      return;
+    }
+
+    // Handle INTERACTION_IFRAME_MODAL_CREATE events (iframe modal creation)
+    if (eventTypeStr === 'INTERACTION_IFRAME_MODAL_CREATE') {
+      // Extract custom_id from the event data
+      const customId = message.data?.custom_id || message.custom_id;
+      if (!customId || typeof customId !== 'string') {
+        return;
+      }
+
+      // Find tasks that are waiting for iframe modal custom ID
+      const messageId = message.message?.id || message.message_id || message.data?.message_id;
+      const tasks = instance.findRunningTask((task) => {
+        // Find tasks with MODAL status or with customId starting with MJ::Inpaint::
+        if (task.status === TaskStatus.MODAL) {
+          const storedMessageId = task.getProperty(TASK_PROPERTY_MESSAGE_ID);
+          return storedMessageId === messageId;
+        }
+        const taskCustomId = task.getProperty(TASK_PROPERTY_CUSTOM_ID);
+        if (taskCustomId && taskCustomId.startsWith('MJ::Inpaint::')) {
+          const storedMessageId = task.getProperty(TASK_PROPERTY_MESSAGE_ID);
+          return storedMessageId === messageId;
+        }
+        return false;
+      });
+
+      if (tasks.length > 0) {
+        // Store iframe modal custom ID for all matching tasks
+        tasks.forEach((task) => {
+          task.setProperty(TASK_PROPERTY_IFRAME_MODAL_CREATE_CUSTOM_ID, customId);
+          console.log(`[iframe-handler-${instance.getInstanceId()}] Set iframe_modal_custom_id for task ${task.id}: ${customId.substring(0, 50)}...`);
+        });
       }
       return;
     }

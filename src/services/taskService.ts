@@ -5,10 +5,10 @@ import { DataUrl, convertBase64Array } from '../utils/convertUtils';
 import { DiscordLoadBalancer } from '../loadbalancer/discordLoadBalancer';
 import { DiscordInstance } from '../loadbalancer/discordInstance';
 import { TaskStoreService } from './store/taskStoreService';
-import { ReturnCode } from '../constants';
+import { ReturnCode, TASK_PROPERTY_DISCORD_INSTANCE_ID, TASK_PROPERTY_NONCE, TASK_PROPERTY_MESSAGE_ID, TASK_PROPERTY_FLAGS, TASK_PROPERTY_CUSTOM_ID, TASK_PROPERTY_FINAL_PROMPT, TASK_PROPERTY_REMIX_MODAL_MESSAGE_ID, TASK_PROPERTY_INTERACTION_METADATA_ID, TASK_PROPERTY_IFRAME_MODAL_CREATE_CUSTOM_ID } from '../constants';
 import { Message } from '../result/Message';
 import { guessFileSuffix } from '../utils/mimeTypeUtils';
-import { TASK_PROPERTY_DISCORD_INSTANCE_ID, TASK_PROPERTY_NONCE } from '../constants';
+import { TaskStatus } from '../enums/TaskStatus';
 
 /**
  * Task service interface
@@ -192,6 +192,29 @@ export class TaskServiceImpl implements TaskService {
       return SubmitResultVO.fail(ReturnCode.NOT_FOUND, `Account unavailable: ${instanceId}`);
     }
 
+    // Handle modal operations (Custom Zoom and Inpaint)
+    if (customId.startsWith('MJ::CustomZoom::') || customId.startsWith('MJ::Inpaint::')) {
+      // If it's an inpaint action, set task status to MODAL
+      if (customId.startsWith('MJ::Inpaint::')) {
+        task.status = TaskStatus.MODAL;
+        task.prompt = '';
+        task.promptEn = '';
+      }
+
+      // Store message ID and flags
+      task.setProperty(TASK_PROPERTY_MESSAGE_ID, targetMessageId);
+      task.setProperty(TASK_PROPERTY_FLAGS, messageFlags);
+      task.setProperty(TASK_PROPERTY_CUSTOM_ID, customId);
+
+      // Save task state
+      await this.taskStoreService.save(task);
+
+      // Return EXISTED (code 21) with "Waiting for window confirm"
+      return SubmitResultVO.of(ReturnCode.EXISTED, 'Waiting for window confirm', task.id!)
+        .setProperty(TASK_PROPERTY_FINAL_PROMPT, task.getProperty(TASK_PROPERTY_FINAL_PROMPT) || '')
+        .setProperty('remix', true);
+    }
+
     const nonce = task.getProperty(TASK_PROPERTY_NONCE);
     return discordInstance.submitTask(task, () =>
       // messageHash is not required for component interactions
@@ -207,10 +230,111 @@ export class TaskServiceImpl implements TaskService {
       return SubmitResultVO.fail(ReturnCode.NOT_FOUND, `Account unavailable: ${instanceId}`);
     }
 
-    const nonce = task.getProperty(TASK_PROPERTY_NONCE);
+    // Get the customId from the original task (stored in task properties)
+    const customId = task.getProperty(TASK_PROPERTY_CUSTOM_ID);
+    const messageId = task.getProperty(TASK_PROPERTY_MESSAGE_ID);
+    const messageFlags = task.getProperty(TASK_PROPERTY_FLAGS) || 0;
+    const nonce = task.getProperty(TASK_PROPERTY_NONCE) || '';
+
+    // If this is an inpaint action, we need to click the button first and wait for WebSocket events
+    if (customId && customId.startsWith('MJ::Inpaint::')) {
+      // Step 1: Click the button programmatically via Discord API (returns 204 No Content)
+      // We need to call customAction directly, not through submitCustomAction which returns EXISTED
+      const actionMessage = await discordInstance.customAction(messageId, messageFlags, customId, nonce);
+      if (actionMessage.getCode() !== ReturnCode.SUCCESS) {
+        return SubmitResultVO.fail(actionMessage.getCode(), actionMessage.getDescription());
+      }
+
+      // Step 2: Wait for remixModalMessageId and interactionMetadataId (polling every 2.5s, max 5 minutes)
+      const maxWaitTime = 300000; // 5 minutes in milliseconds
+      const pollInterval = 2500; // 2.5 seconds
+      const startTime = Date.now();
+
+      while (true) {
+        // Get fresh task state
+        const currentTask = discordInstance.getRunningTask(task.id!);
+        if (!currentTask) {
+          // Try to get from task store
+          const storedTask = await this.taskStoreService.get(task.id!);
+          if (!storedTask) {
+            return SubmitResultVO.fail(ReturnCode.NOT_FOUND, 'Task not found');
+          }
+          
+          const remixModalMessageId = storedTask.getProperty(TASK_PROPERTY_REMIX_MODAL_MESSAGE_ID);
+          const interactionMetadataId = storedTask.getProperty(TASK_PROPERTY_INTERACTION_METADATA_ID);
+          
+          if (remixModalMessageId && interactionMetadataId) {
+            // Wait additional 1.2 seconds as per C# implementation
+            await this.sleep(1200);
+            
+            // Get iframe custom ID
+            const iframeCustomId = storedTask.getProperty(TASK_PROPERTY_IFRAME_MODAL_CREATE_CUSTOM_ID);
+            if (!iframeCustomId) {
+              return SubmitResultVO.fail(ReturnCode.NOT_FOUND, 'Iframe custom ID not found');
+            }
+
+            // Call submitInpaint with iframe custom ID
+            const maskBase64 = payload.maskBase64 || '';
+            const prompt = payload.prompt || storedTask.promptEn || storedTask.prompt || '';
+            
+            const inpaintResult = await discordInstance.submitInpaint(iframeCustomId, maskBase64, prompt);
+            if (inpaintResult.getCode() !== ReturnCode.SUCCESS) {
+              return SubmitResultVO.fail(
+                ReturnCode.FAILURE,
+                `Failed to submit inpaint job: ${inpaintResult.getDescription()}`
+              );
+            }
+
+            return SubmitResultVO.of(ReturnCode.SUCCESS, 'Success', task.id!);
+          }
+        } else {
+          const remixModalMessageId = currentTask.getProperty(TASK_PROPERTY_REMIX_MODAL_MESSAGE_ID);
+          const interactionMetadataId = currentTask.getProperty(TASK_PROPERTY_INTERACTION_METADATA_ID);
+          
+          if (remixModalMessageId && interactionMetadataId) {
+            // Wait additional 1.2 seconds as per C# implementation
+            await this.sleep(1200);
+            
+            // Get iframe custom ID
+            const iframeCustomId = currentTask.getProperty(TASK_PROPERTY_IFRAME_MODAL_CREATE_CUSTOM_ID);
+            if (!iframeCustomId) {
+              return SubmitResultVO.fail(ReturnCode.NOT_FOUND, 'Iframe custom ID not found');
+            }
+
+            // Call submitInpaint with iframe custom ID
+            const maskBase64 = payload.maskBase64 || '';
+            const prompt = payload.prompt || currentTask.promptEn || currentTask.prompt || '';
+            
+            const inpaintResult = await discordInstance.submitInpaint(iframeCustomId, maskBase64, prompt);
+            if (inpaintResult.getCode() !== ReturnCode.SUCCESS) {
+              return SubmitResultVO.fail(
+                ReturnCode.FAILURE,
+                `Failed to submit inpaint job: ${inpaintResult.getDescription()}`
+              );
+            }
+
+            return SubmitResultVO.of(ReturnCode.SUCCESS, 'Success', task.id!);
+          }
+        }
+
+        // Check timeout
+        if (Date.now() - startTime > maxWaitTime) {
+          return SubmitResultVO.fail(ReturnCode.NOT_FOUND, 'Timeout: remixModalMessageId and interactionMetadataId not found');
+        }
+
+        // Wait before next poll
+        await this.sleep(pollInterval);
+      }
+    }
+
+    // For non-inpaint actions, use the original modal submit flow
     return discordInstance.submitTask(task, () =>
       (discordInstance as any).modalSubmit(payload.modalTaskId, { prompt: payload.prompt, maskBase64: payload.maskBase64 }, nonce || '')
     );
+  }
+
+  private sleep(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms));
   }
 
   async submitEdits(task: Task, messageId: string, customId: string, maskBase64: string, prompt: string): Promise<SubmitResultVO> {
