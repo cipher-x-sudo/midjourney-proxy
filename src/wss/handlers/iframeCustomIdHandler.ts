@@ -20,13 +20,14 @@ export class IframeCustomIdHandler extends MessageHandler {
   }
 
   /**
-   * Debug method to find all iframe URLs in an object
+   * Find all iframe URLs in an object for debugging
    * Searches recursively through the object structure to find any URLs containing 'discordsays.com'
    * @param instanceId Instance ID for logging
    * @param obj Object to search
+   * @returns Array of found URLs with their paths
    */
-  private debugFindIframeUrls(instanceId: string, obj: any): void {
-    const allUrls: string[] = [];
+  private findIframeUrls(instanceId: string, obj: any): Array<{ path: string; url: string }> {
+    const allUrls: Array<{ path: string; url: string }> = [];
     const findUrlsInObject = (searchObj: any, path: string = ''): void => {
       if (!searchObj || typeof searchObj !== 'object') return;
       for (const key in searchObj) {
@@ -34,7 +35,7 @@ export class IframeCustomIdHandler extends MessageHandler {
           const value = searchObj[key];
           const currentPath = path ? `${path}.${key}` : key;
           if (typeof value === 'string' && value.includes('discordsays.com')) {
-            allUrls.push(`${currentPath}: ${value.substring(0, 200)}`);
+            allUrls.push({ path: currentPath, url: value });
           } else if (value && typeof value === 'object') {
             findUrlsInObject(value, currentPath);
           }
@@ -42,13 +43,7 @@ export class IframeCustomIdHandler extends MessageHandler {
       }
     };
     findUrlsInObject(obj);
-    
-    if (allUrls.length > 0) {
-      console.log(`[iframe-custom-id-handler-${instanceId}] Found ${allUrls.length} iframe URL(s) in interaction event:`);
-      allUrls.forEach((url, idx) => console.log(`[iframe-custom-id-handler-${instanceId}]   iframe URL[${idx}]: ${url}`));
-    } else {
-      console.log(`[iframe-custom-id-handler-${instanceId}] No iframe URLs found in interaction event structure`);
-    }
+    return allUrls;
   }
 
   /**
@@ -91,7 +86,16 @@ export class IframeCustomIdHandler extends MessageHandler {
       console.log(`[iframe-custom-id-handler-${instance.getInstanceId()}] Received ${eventTypeStr} event`);
       
       // Debug: Find all iframe URLs in the interaction event
-      this.debugFindIframeUrls(instance.getInstanceId(), message);
+      const iframeUrls = this.findIframeUrls(instance.getInstanceId(), message);
+      
+      if (iframeUrls.length > 0) {
+        console.log(`[iframe-custom-id-handler-${instance.getInstanceId()}] Found ${iframeUrls.length} iframe URL(s) in interaction event:`);
+        iframeUrls.forEach((item, idx) => {
+          console.log(`[iframe-custom-id-handler-${instance.getInstanceId()}]   iframe-url[${idx}]: ${item.path} = ${item.url.substring(0, 200)}${item.url.length > 200 ? '...' : ''}`);
+        });
+      } else {
+        console.log(`[iframe-custom-id-handler-${instance.getInstanceId()}] No iframe URLs found in interaction event structure`);
+      }
       
       console.log(`[iframe-custom-id-handler-${instance.getInstanceId()}] Interaction event data structure:`, JSON.stringify(message).substring(0, 2000));
       
