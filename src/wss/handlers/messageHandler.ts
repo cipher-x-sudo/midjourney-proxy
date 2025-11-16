@@ -100,7 +100,8 @@ export abstract class MessageHandler {
 
     if (!task && action !== TaskAction.BLEND) {
       condition.setFinalPrompt(undefined);
-      condition.setStatusSet(new Set([TaskStatus.SUBMITTED]));
+      // Also check IN_PROGRESS status in fallback (not just SUBMITTED)
+      condition.setStatusSet(new Set([TaskStatus.IN_PROGRESS, TaskStatus.SUBMITTED]));
       const matchPrompt = getPrimaryPrompt(finalPrompt).replace(/\s+/g, '');
       const tasks = instance.findRunningTask(condition.toFunction());
       task = tasks

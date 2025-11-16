@@ -22,6 +22,7 @@ import { convertBase64Array, convertChangeParams, getPrimaryPrompt } from '../ut
 import { guessFileSuffix } from '../utils/mimeTypeUtils';
 import { SnowFlake } from '../utils/snowflake';
 import { TaskChangeParams } from '../utils/taskChangeParams';
+import { parseActionFromCustomId } from '../utils/actionUtils';
 import {
   TASK_PROPERTY_NOTIFY_HOOK,
   TASK_PROPERTY_NONCE,
@@ -255,7 +256,8 @@ export class SubmitController {
     }
 
     const task = this.newTask(actionDTO);
-    task.action = TaskAction.VARIATION;
+    // Parse customId to determine the correct action type
+    task.action = parseActionFromCustomId(actionDTO.customId);
     task.prompt = targetTask.prompt;
     task.promptEn = targetTask.promptEn;
     task.setProperty(TASK_PROPERTY_FINAL_PROMPT, targetTask.getProperty(TASK_PROPERTY_FINAL_PROMPT));
