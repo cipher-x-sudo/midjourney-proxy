@@ -5,6 +5,7 @@ import { Message } from '../result/Message';
 import { BlendDimensions } from '../enums/BlendDimensions';
 import { DataUrl } from '../utils/convertUtils';
 import { TaskCondition } from '../support/taskCondition';
+import { IframeData } from '../services/discordService';
 
 /**
  * Discord instance interface
@@ -40,9 +41,9 @@ export interface DiscordInstance {
   edits(messageId: string, customId: string, nonce: string): Promise<Message<void>>;
   submitInpaint(customId: string, maskBase64: string, prompt: string): Promise<Message<void>>;
   fetchMessage(messageId: string): Promise<Message<any>>;
-  extractIframeCustomId(message: any): string | null;
-  waitForIframeCustomId(messageId: string, timeoutMs: number): Promise<string>;
-  notifyIframeCustomId?(messageId: string, customId: string): void;
+  extractIframeCustomId(message: any): IframeData | null;
+  waitForIframeCustomId(messageId: string, timeoutMs: number): Promise<IframeData>;
+  notifyIframeCustomId?(messageId: string, iframeData: IframeData): void;
 
   // Connection status
   getConnectionStatus(): {

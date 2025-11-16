@@ -32,7 +32,7 @@ export class DiscordInstanceImpl implements DiscordInstance {
   private taskFutureMap: Map<string, Promise<any>> = new Map();
   private resumeData: ResumeData | null = null;
   // Map of messageId -> { resolve, reject, timeout }
-  private pendingIframeExtractions: Map<string, { resolve: (customId: string) => void; reject: (error: Error) => void; timeout: NodeJS.Timeout }> = new Map();
+  private pendingIframeExtractions: Map<string, { resolve: (iframeData: IframeData) => void; reject: (error: Error) => void; timeout: NodeJS.Timeout }> = new Map();
 
   constructor(
     account: DiscordAccount,
@@ -403,7 +403,7 @@ export class DiscordInstanceImpl implements DiscordInstance {
     throw new Error('fetchMessage not implemented');
   }
 
-  extractIframeCustomId(message: any): string | null {
+  extractIframeCustomId(message: any): IframeData | null {
     if (this.service.extractIframeCustomId) {
       return this.service.extractIframeCustomId(message);
     }
@@ -411,13 +411,13 @@ export class DiscordInstanceImpl implements DiscordInstance {
   }
 
   /**
-   * Wait for iframe custom_id to appear in WebSocket MESSAGE_UPDATE event
+   * Wait for iframe data (custom_id, instance_id, frame_id) to appear in WebSocket event
    * @param messageId The message ID to wait for
    * @param timeoutMs Maximum time to wait in milliseconds
-   * @returns Promise that resolves with the iframe custom_id
+   * @returns Promise that resolves with the iframe data
    */
-  async waitForIframeCustomId(messageId: string, timeoutMs: number): Promise<string> {
-    console.log(`[discord-instance-${this.accountData.getDisplay()}] waitForIframeCustomId - Waiting for iframe custom_id for message ${messageId} (timeout: ${timeoutMs}ms)`);
+  async waitForIframeCustomId(messageId: string, timeoutMs: number): Promise<IframeData> {
+    console.log(`[discord-instance-${this.accountData.getDisplay()}] waitForIframeCustomId - Waiting for iframe data for message ${messageId} (timeout: ${timeoutMs}ms)`);
     
     // Check if there's already a pending request for this message ID
     if (this.pendingIframeExtractions.has(messageId)) {
@@ -427,20 +427,20 @@ export class DiscordInstanceImpl implements DiscordInstance {
       console.warn(`[discord-instance-${this.accountData.getDisplay()}] waitForIframeCustomId - Replacing existing pending request for message ${messageId}`);
     }
 
-    return new Promise<string>((resolve, reject) => {
+    return new Promise<IframeData>((resolve, reject) => {
       const timeout = setTimeout(() => {
         this.pendingIframeExtractions.delete(messageId);
-        const error = new Error(`Timeout waiting for iframe custom_id for message ${messageId} after ${timeoutMs}ms`);
+        const error = new Error(`Timeout waiting for iframe data for message ${messageId} after ${timeoutMs}ms`);
         console.error(`[discord-instance-${this.accountData.getDisplay()}] waitForIframeCustomId - ${error.message}`);
         reject(error);
       }, timeoutMs);
 
       this.pendingIframeExtractions.set(messageId, {
-        resolve: (customId: string) => {
+        resolve: (iframeData: IframeData) => {
           clearTimeout(timeout);
           this.pendingIframeExtractions.delete(messageId);
-          console.log(`[discord-instance-${this.accountData.getDisplay()}] waitForIframeCustomId - Resolved with custom_id: ${customId} for message ${messageId}`);
-          resolve(customId);
+          console.log(`[discord-instance-${this.accountData.getDisplay()}] waitForIframeCustomId - Resolved with iframe data: custom_id=${iframeData.custom_id.substring(0, 50)}..., instance_id=${iframeData.instance_id ? 'present' : 'missing'}, frame_id=${iframeData.frame_id || 'missing'} for message ${messageId}`);
+          resolve(iframeData);
         },
         reject: (error: Error) => {
           clearTimeout(timeout);
@@ -454,26 +454,26 @@ export class DiscordInstanceImpl implements DiscordInstance {
   }
 
   /**
-   * Notify pending listeners that iframe custom_id was found
+   * Notify pending listeners that iframe data was found
    * Called by IframeCustomIdHandler when it detects iframe in WebSocket event
    */
-  notifyIframeCustomId(messageId: string, customId: string): void {
+  notifyIframeCustomId(messageId: string, iframeData: IframeData): void {
     const pending = this.pendingIframeExtractions.get(messageId);
     if (pending) {
-      console.log(`[discord-instance-${this.accountData.getDisplay()}] notifyIframeCustomId - Notifying pending listener for message ${messageId} with custom_id: ${customId}`);
-      pending.resolve(customId);
+      console.log(`[discord-instance-${this.accountData.getDisplay()}] notifyIframeCustomId - Notifying pending listener for message ${messageId} with iframe data: custom_id=${iframeData.custom_id.substring(0, 50)}...`);
+      pending.resolve(iframeData);
     } else {
-      console.debug(`[discord-instance-${this.accountData.getDisplay()}] notifyIframeCustomId - No pending listener for message ${messageId}, custom_id: ${customId}`);
+      console.debug(`[discord-instance-${this.accountData.getDisplay()}] notifyIframeCustomId - No pending listener for message ${messageId}, custom_id: ${iframeData.custom_id.substring(0, 50)}...`);
       
       // Fallback: If no exact match, try to resolve the most recent pending request
       // This handles cases where the interaction event doesn't have the exact message_id
       if (this.pendingIframeExtractions.size > 0) {
         const pendingEntries = Array.from(this.pendingIframeExtractions.entries());
         const mostRecent = pendingEntries[pendingEntries.length - 1];
-        console.log(`[discord-instance-${this.accountData.getDisplay()}] notifyIframeCustomId - Fallback: Notifying most recent pending listener (message ${mostRecent[0]}) with custom_id: ${customId}`);
-        mostRecent[1].resolve(customId);
+        console.log(`[discord-instance-${this.accountData.getDisplay()}] notifyIframeCustomId - Fallback: Notifying most recent pending listener (message ${mostRecent[0]}) with iframe data`);
+        mostRecent[1].resolve(iframeData);
       } else {
-        console.warn(`[discord-instance-${this.accountData.getDisplay()}] notifyIframeCustomId - No pending listeners at all, custom_id will be lost: ${customId}`);
+        console.warn(`[discord-instance-${this.accountData.getDisplay()}] notifyIframeCustomId - No pending listeners at all, iframe data will be lost: custom_id=${iframeData.custom_id.substring(0, 50)}...`);
       }
     }
   }

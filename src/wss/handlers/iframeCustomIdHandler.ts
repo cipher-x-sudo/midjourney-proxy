@@ -34,21 +34,21 @@ export class IframeCustomIdHandler extends MessageHandler {
 
       const messageId = message.id;
       
-      // Try to extract iframe custom_id from the message
-      const iframeCustomId = instance.extractIframeCustomId(message);
+      // Try to extract iframe data from the message
+      const iframeData = instance.extractIframeCustomId(message);
       
-      if (iframeCustomId) {
-        console.log(`[iframe-custom-id-handler-${instance.getInstanceId()}] Found iframe custom_id in ${eventTypeStr} event for message ${messageId}: ${iframeCustomId}`);
+      if (iframeData) {
+        console.log(`[iframe-custom-id-handler-${instance.getInstanceId()}] Found iframe data in ${eventTypeStr} event for message ${messageId}: custom_id=${iframeData.custom_id.substring(0, 50)}..., instance_id=${iframeData.instance_id ? 'present' : 'missing'}, frame_id=${iframeData.frame_id || 'missing'}`);
         
         // Notify any pending listeners waiting for this message ID
         if (instance.notifyIframeCustomId) {
-          instance.notifyIframeCustomId(messageId, iframeCustomId);
+          instance.notifyIframeCustomId(messageId, iframeData);
         }
       } else {
         // Log when we check a message but don't find iframe (for debugging)
         // Only log if message has components or embeds (might contain iframe)
         if (message.components || message.embeds) {
-          console.debug(`[iframe-custom-id-handler-${instance.getInstanceId()}] Checked ${eventTypeStr} event for message ${messageId} - no iframe custom_id found`);
+          console.debug(`[iframe-custom-id-handler-${instance.getInstanceId()}] Checked ${eventTypeStr} event for message ${messageId} - no iframe data found`);
         }
       }
       return;
@@ -59,44 +59,38 @@ export class IframeCustomIdHandler extends MessageHandler {
       console.log(`[iframe-custom-id-handler-${instance.getInstanceId()}] Received ${eventTypeStr} event`);
       console.log(`[iframe-custom-id-handler-${instance.getInstanceId()}] Interaction event data structure:`, JSON.stringify(message).substring(0, 1000));
       
-      // Extract custom_id from interaction data
+      // Extract iframe data from interaction data
       // The interaction might have custom_id directly, or in data.url, or in data.custom_id
-      let iframeCustomId: string | null = null;
+      let iframeData = null;
       
       // Check for custom_id in various locations
-      if (message.custom_id && typeof message.custom_id === 'string' && message.custom_id.includes('MJ::iframe::')) {
-        iframeCustomId = message.custom_id;
-        console.log(`[iframe-custom-id-handler-${instance.getInstanceId()}] Found custom_id in message.custom_id: ${iframeCustomId}`);
-      } else if (message.data?.custom_id && typeof message.data.custom_id === 'string' && message.data.custom_id.includes('MJ::iframe::')) {
-        iframeCustomId = message.data.custom_id;
-        console.log(`[iframe-custom-id-handler-${instance.getInstanceId()}] Found custom_id in message.data.custom_id: ${iframeCustomId}`);
-      } else if (message.url && typeof message.url === 'string') {
-        // Extract from URL if present
-        console.log(`[iframe-custom-id-handler-${instance.getInstanceId()}] Checking message.url for iframe custom_id: ${message.url.substring(0, 200)}`);
-        iframeCustomId = instance.extractIframeCustomId({ content: message.url });
+      if (message.url && typeof message.url === 'string') {
+        // Extract from URL if present (this will get all three: custom_id, instance_id, frame_id)
+        console.log(`[iframe-custom-id-handler-${instance.getInstanceId()}] Checking message.url for iframe data: ${message.url.substring(0, 200)}`);
+        iframeData = instance.extractIframeCustomId({ content: message.url });
       } else {
         // Try recursive extraction from the entire interaction object
         console.log(`[iframe-custom-id-handler-${instance.getInstanceId()}] Attempting recursive extraction from interaction object`);
-        iframeCustomId = instance.extractIframeCustomId(message);
+        iframeData = instance.extractIframeCustomId(message);
       }
       
-      if (iframeCustomId) {
-        console.log(`[iframe-custom-id-handler-${instance.getInstanceId()}] Found iframe custom_id in ${eventTypeStr} event: ${iframeCustomId}`);
+      if (iframeData) {
+        console.log(`[iframe-custom-id-handler-${instance.getInstanceId()}] Found iframe data in ${eventTypeStr} event: custom_id=${iframeData.custom_id.substring(0, 50)}..., instance_id=${iframeData.instance_id ? 'present' : 'missing'}, frame_id=${iframeData.frame_id || 'missing'}`);
         
         // For interaction events, we need to match by message_id from the interaction
         // The interaction should have a message_id (the original message where button was clicked)
         const messageId = message.message?.id || message.message_id || message.data?.message_id;
         
         if (messageId && instance.notifyIframeCustomId) {
-          console.log(`[iframe-custom-id-handler-${instance.getInstanceId()}] Notifying pending listener for message ${messageId} with custom_id: ${iframeCustomId}`);
-          instance.notifyIframeCustomId(messageId, iframeCustomId);
+          console.log(`[iframe-custom-id-handler-${instance.getInstanceId()}] Notifying pending listener for message ${messageId} with iframe data`);
+          instance.notifyIframeCustomId(messageId, iframeData);
         } else {
           // If no message_id, try to notify all pending listeners (fallback)
-          console.warn(`[iframe-custom-id-handler-${instance.getInstanceId()}] Found iframe custom_id in ${eventTypeStr} but no message_id to match. Custom_id: ${iframeCustomId}`);
+          console.warn(`[iframe-custom-id-handler-${instance.getInstanceId()}] Found iframe data in ${eventTypeStr} but no message_id to match. Custom_id: ${iframeData.custom_id.substring(0, 50)}...`);
           console.warn(`[iframe-custom-id-handler-${instance.getInstanceId()}] Interaction structure - message: ${message.message?.id}, message_id: ${message.message_id}, data.message_id: ${message.data?.message_id}`);
         }
       } else {
-        console.debug(`[iframe-custom-id-handler-${instance.getInstanceId()}] Checked ${eventTypeStr} event - no iframe custom_id found. Full message structure:`, JSON.stringify(message).substring(0, 2000));
+        console.debug(`[iframe-custom-id-handler-${instance.getInstanceId()}] Checked ${eventTypeStr} event - no iframe data found. Full message structure:`, JSON.stringify(message).substring(0, 2000));
       }
       return;
     }

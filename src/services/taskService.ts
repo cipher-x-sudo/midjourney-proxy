@@ -240,45 +240,46 @@ export class TaskServiceImpl implements TaskService {
       return actionResult;
     }
 
-    // Step 2: Wait for WebSocket MESSAGE_UPDATE event containing iframe custom_id
+    // Step 2: Wait for WebSocket MESSAGE_UPDATE event containing iframe data (custom_id, instance_id, frame_id)
     // The iframe modal appears via WebSocket events, not HTTP API calls
     const waitTimeoutMs = 10000; // 10 seconds timeout
-    let iframeCustomId: string | null = null;
+    let iframeData = null;
 
-    console.log(`[task-service] submitEdits - Step 2: Waiting for WebSocket MESSAGE_UPDATE event with iframe custom_id for message ${messageId} (timeout: ${waitTimeoutMs}ms)`);
+    console.log(`[task-service] submitEdits - Step 2: Waiting for WebSocket event with iframe data for message ${messageId} (timeout: ${waitTimeoutMs}ms)`);
     const waitStartTime = Date.now();
 
     try {
-      // Wait for WebSocket event that contains the iframe custom_id
-      iframeCustomId = await discordInstance.waitForIframeCustomId(messageId, waitTimeoutMs);
+      // Wait for WebSocket event that contains the iframe data
+      iframeData = await discordInstance.waitForIframeCustomId(messageId, waitTimeoutMs);
       const waitElapsed = Date.now() - waitStartTime;
       const totalElapsed = waitElapsed + buttonClickElapsed;
       
-      console.log(`[task-service] submitEdits - Step 2: SUCCESS - Received iframe custom_id via WebSocket: ${iframeCustomId} (${waitElapsed}ms wait, ${totalElapsed}ms total since button click)`);
+      console.log(`[task-service] submitEdits - Step 2: SUCCESS - Received iframe data via WebSocket: custom_id=${iframeData.custom_id.substring(0, 50)}..., instance_id=${iframeData.instance_id ? 'present' : 'missing'}, frame_id=${iframeData.frame_id || 'missing'} (${waitElapsed}ms wait, ${totalElapsed}ms total since button click)`);
     } catch (error: any) {
       const waitElapsed = Date.now() - waitStartTime;
       const totalElapsed = waitElapsed + buttonClickElapsed;
       
-      console.error(`[task-service] submitEdits failed at Step 2 - Could not get iframe custom_id from WebSocket event (${waitElapsed}ms wait, ${totalElapsed}ms total): ${error.message}`);
+      console.error(`[task-service] submitEdits failed at Step 2 - Could not get iframe data from WebSocket event (${waitElapsed}ms wait, ${totalElapsed}ms total): ${error.message}`);
       
       return SubmitResultVO.fail(
         ReturnCode.VALIDATION_ERROR,
-        `Failed to receive iframe custom_id from WebSocket event. The Vary Region/Inpaint button was clicked successfully, but Discord did not send a MESSAGE_UPDATE event with iframe data within ${waitTimeoutMs}ms. Error: ${error.message}`
+        `Failed to receive iframe data from WebSocket event. The Vary Region/Inpaint button was clicked successfully, but Discord did not send a WebSocket event with iframe data within ${waitTimeoutMs}ms. Error: ${error.message}`
       );
     }
 
-    // Step 3: Validate that we found the iframe custom_id
-    if (!iframeCustomId) {
-      console.error(`[task-service] submitEdits failed at Step 2 - iframeCustomId is null after WebSocket wait`);
+    // Step 3: Validate that we found the iframe data
+    if (!iframeData || !iframeData.custom_id) {
+      console.error(`[task-service] submitEdits failed at Step 2 - iframeData is null or missing custom_id after WebSocket wait`);
       return SubmitResultVO.fail(
         ReturnCode.VALIDATION_ERROR,
-        'Failed to extract iframe custom_id from WebSocket event. The iframe modal may not have appeared.'
+        'Failed to extract iframe data from WebSocket event. The iframe modal may not have appeared.'
       );
     }
 
     // Step 4: Submit directly to inpaint API with the MJ::iframe:: custom_id
-    console.log(`[task-service] submitEdits - Step 3: Submitting inpaint job with iframeCustomId: ${iframeCustomId}, maskBase64 length: ${maskBase64?.length || 0}, prompt: ${prompt ? prompt.substring(0, 50) : 'empty'}`);
-    const inpaintResult = await discordInstance.submitInpaint(iframeCustomId, maskBase64, prompt);
+    // Note: instance_id and frame_id are available in iframeData but may not be required for submitInpaint
+    console.log(`[task-service] submitEdits - Step 3: Submitting inpaint job with iframeCustomId: ${iframeData.custom_id}, instance_id: ${iframeData.instance_id || 'N/A'}, frame_id: ${iframeData.frame_id || 'N/A'}, maskBase64 length: ${maskBase64?.length || 0}, prompt: ${prompt ? prompt.substring(0, 50) : 'empty'}`);
+    const inpaintResult = await discordInstance.submitInpaint(iframeData.custom_id, maskBase64, prompt);
 
     console.log(`[task-service] submitEdits - Step 3 result: code=${inpaintResult.getCode()}, description=${inpaintResult.getDescription()}`);
 
