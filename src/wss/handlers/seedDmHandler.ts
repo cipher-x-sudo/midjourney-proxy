@@ -198,8 +198,8 @@ export class SeedDmHandler extends MessageHandler {
           return false;
         }
         
-        // Must have finish time and image URL
-        if (!task.finishTime || !task.imageUrl) {
+        // Must have finish time (imageUrl not required for stored tasks)
+        if (!task.finishTime) {
           return false;
         }
         
