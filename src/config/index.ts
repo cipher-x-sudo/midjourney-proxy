@@ -410,3 +410,16 @@ export function getTaskStoreTimeoutMs(): number {
   return parseDuration(config.mj.taskStore.timeout);
 }
 
+/**
+ * Get seed wait timeout in milliseconds
+ * Env: MJ_SEED_WAIT_MS (number, ms). Defaults to 15000ms.
+ */
+export function getSeedWaitMs(): number {
+  const env = process.env.MJ_SEED_WAIT_MS;
+  const parsed = env ? parseInt(env, 10) : NaN;
+  if (!isNaN(parsed) && parsed > 0) {
+    return parsed;
+  }
+  return 15000;
+}
+

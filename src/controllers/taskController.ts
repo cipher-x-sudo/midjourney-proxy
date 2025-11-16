@@ -4,7 +4,8 @@ import { TaskConditionDTO } from '../dto/TaskConditionDTO';
 import { TaskStoreService } from '../services/store/taskStoreService';
 import { DiscordLoadBalancer } from '../loadbalancer/discordLoadBalancer';
 import { ReturnCode } from '../constants';
-import { TASK_PROPERTY_SEED } from '../constants';
+import { TASK_PROPERTY_SEED, TASK_PROPERTY_MESSAGE_ID, TASK_PROPERTY_DISCORD_INSTANCE_ID } from '../constants';
+import { getSeedWaitMs } from '../config';
 
 /**
  * Task controller
@@ -158,11 +159,64 @@ export class TaskController {
       const ageMessage = taskAge !== null && taskAge < 120000 
         ? ` (task completed ${Math.round(taskAge / 1000)} seconds ago, DM may be delayed)` 
         : '';
-      console.log(`[task-controller] [7] Task ${id} found but seed not available${ageMessage}`);
+      console.log(`[task-controller] [6a] Task ${id} has no seed yet${ageMessage}. Attempting on-demand reaction to fetch seed...`);
+
+      // Determine message and channel to react to
+      const messageId = task.getProperty(TASK_PROPERTY_MESSAGE_ID);
+      const instanceId = task.getProperty(TASK_PROPERTY_DISCORD_INSTANCE_ID);
+      const instance = instanceId
+        ? this.discordLoadBalancer.getDiscordInstance(instanceId)
+        : (this.discordLoadBalancer.getAliveInstances()[0] || null);
+
+      if (!messageId || !instance || !instance.account().channelId) {
+        console.warn(`[task-controller] [6b] Cannot trigger seed reaction - messageId:${messageId || 'null'}, instance:${instance ? 'ok' : 'null'}, channelId:${instance && instance.account().channelId ? 'ok' : 'null'}`);
+      } else {
+        const channelId = instance.account().channelId!;
+        const envelopeEmoji = '\u{2709}\u{FE0F}'; // ✉️
+        try {
+          const reactResult = await instance.reactWithEmoji(messageId, channelId, envelopeEmoji);
+          if (reactResult.getCode() !== ReturnCode.SUCCESS) {
+            console.warn(`[task-controller] [6c] Seed reaction returned non-success: ${reactResult.getDescription()}`);
+          } else {
+            console.log(`[task-controller] [6c] Seed reaction sent successfully for message ${messageId} in channel ${channelId}`);
+          }
+        } catch (e: any) {
+          console.warn(`[task-controller] [6c] Failed to send seed reaction: ${e?.message || e}`);
+        }
+
+        // Wait for seed to be populated by seedDmHandler
+        const waitMs = getSeedWaitMs();
+        const deadline = Date.now() + waitMs;
+        console.log(`[task-controller] [6d] Waiting up to ${waitMs}ms for seed to arrive via DM...`);
+        while (Date.now() < deadline) {
+          try {
+            const refreshed = await this.taskStoreService.get(id);
+            const refreshedSeed = refreshed?.getProperty(TASK_PROPERTY_SEED);
+            if (refreshedSeed) {
+              console.log(`[task-controller] [6e] Seed arrived during wait: ${refreshedSeed}`);
+              console.log(`[task-controller] ===== End imageSeed request for task ${id} =====`);
+              return {
+                code: ReturnCode.SUCCESS,
+                description: 'Success',
+                seed: refreshedSeed,
+              };
+            }
+          } catch (e) {
+            // ignore transient store errors during polling
+          }
+          await this.sleep(1000);
+        }
+      }
+
+      // Not available yet after waiting
+      const retryAfterSeconds = 5;
+      reply.header('Retry-After', String(retryAfterSeconds));
+      reply.status(202);
+      console.log(`[task-controller] [7] Seed not available after on-demand attempt; returning 202 for task ${id}`);
       console.log(`[task-controller] ===== End imageSeed request for task ${id} =====`);
       return {
-        code: ReturnCode.NOT_FOUND,
-        description: `Seed not yet received from MidJourney (DM may be delayed)${ageMessage}`,
+        code: ReturnCode.IN_QUEUE,
+        description: `Seed not ready, please retry shortly${ageMessage}`,
       };
     }
 
@@ -174,6 +228,10 @@ export class TaskController {
       description: 'Success',
       seed: seed,
     };
+  }
+
+  private sleep(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms));
   }
 }
 

@@ -141,22 +141,7 @@ export abstract class MessageHandler {
       }
     }
     task.success();
-
-    // Automatically react with envelope emoji to request seed
-    if (task.imageUrl && message.id) {
-      const messageId = task.getProperty(TASK_PROPERTY_MESSAGE_ID) || message.id;
-      const channelId = instance.account().channelId;
-      
-      // Only react if we have both messageId and channelId
-      if (messageId && channelId) {
-        const envelopeEmoji = '\u{2709}\u{FE0F}'; // ✉️ envelope emoji (U+2709 with variation selector)
-        
-        // Fire-and-forget: react with envelope emoji (don't await, don't block)
-        instance.reactWithEmoji(messageId, channelId, envelopeEmoji).catch((error: any) => {
-          console.warn(`[message-handler] Failed to react with envelope emoji for task ${task.id}:`, error.message);
-        });
-      }
-    }
+    // Seed reaction will be added on-demand when imageSeed is requested
   }
 
   /**
