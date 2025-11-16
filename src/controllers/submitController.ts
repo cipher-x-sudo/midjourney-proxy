@@ -12,13 +12,14 @@ import { SubmitShortenDTO } from '../dto/SubmitShortenDTO';
 import { SubmitBlendDTO } from '../dto/SubmitBlendDTO';
 import { SubmitActionDTO } from '../dto/SubmitActionDTO';
 import { SubmitModalDTO } from '../dto/SubmitModalDTO';
+import { SubmitEditsDTO } from '../dto/SubmitEditsDTO';
 import { TaskService } from '../services/taskService';
 import { TaskStoreService } from '../services/store/taskStoreService';
 import { TranslateService } from '../services/translate/translateService';
 import { config } from '../config';
 import { BannedPromptException } from '../exceptions/BannedPromptException';
 import { checkBanned } from '../utils/bannedPromptUtils';
-import { convertBase64Array, convertChangeParams, getPrimaryPrompt } from '../utils/convertUtils';
+import { convertBase64Array, convertChangeParams, getPrimaryPrompt, DataUrl } from '../utils/convertUtils';
 import { guessFileSuffix } from '../utils/mimeTypeUtils';
 import { SnowFlake } from '../utils/snowflake';
 import { TaskChangeParams } from '../utils/taskChangeParams';
@@ -300,6 +301,51 @@ export class SubmitController {
       maskBase64: modalDTO.maskBase64,
       modalTaskId: modalDTO.taskId,
     });
+  }
+
+  async edits(request: FastifyRequest<{ Body: SubmitEditsDTO }>, reply: FastifyReply): Promise<SubmitResultVO> {
+    const editsDTO = request.body;
+
+    if (!editsDTO.prompt || editsDTO.prompt.trim().length === 0) {
+      return SubmitResultVO.fail(ReturnCode.VALIDATION_ERROR, 'prompt cannot be empty');
+    }
+
+    if (!editsDTO.maskBase64 || editsDTO.maskBase64.trim().length === 0) {
+      return SubmitResultVO.fail(ReturnCode.VALIDATION_ERROR, 'maskBase64 cannot be empty');
+    }
+
+    if (!editsDTO.image || editsDTO.image.trim().length === 0) {
+      return SubmitResultVO.fail(ReturnCode.VALIDATION_ERROR, 'image cannot be empty');
+    }
+
+    let prompt = editsDTO.prompt.trim();
+    const task = this.newTask(editsDTO);
+    task.action = TaskAction.VARIATION;
+    task.prompt = prompt;
+
+    const promptEn = await this.translatePrompt(prompt);
+    try {
+      checkBanned(promptEn);
+    } catch (e) {
+      if (e instanceof BannedPromptException) {
+        return SubmitResultVO.fail(ReturnCode.BANNED_PROMPT, 'may contain sensitive words')
+          .setProperty('promptEn', promptEn)
+          .setProperty('bannedWord', e.message);
+      }
+      throw e;
+    }
+
+    let imageDataUrl: DataUrl;
+    try {
+      const dataUrls = convertBase64Array([editsDTO.image]);
+      imageDataUrl = dataUrls[0];
+    } catch (e) {
+      return SubmitResultVO.fail(ReturnCode.VALIDATION_ERROR, 'image format error');
+    }
+
+    task.promptEn = promptEn;
+    task.description = `/edits ${prompt}`;
+    return this.taskService.submitEdits(task, imageDataUrl, editsDTO.maskBase64, promptEn);
   }
 
   private newTask(base: any): Task {

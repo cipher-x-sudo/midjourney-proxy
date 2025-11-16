@@ -23,6 +23,7 @@ export interface DiscordService {
   removeOwnReaction(messageId: string, channelId: string, emoji: string): Promise<Message<void>>;
   customAction(messageId: string, messageFlags: number, customId: string, nonce: string): Promise<Message<void>>;
   modalSubmit(taskId: string, fields: { prompt?: string; maskBase64?: string }, nonce: string): Promise<Message<void>>;
+  edits(messageId: string, customId: string, nonce: string): Promise<Message<void>>;
 }
 
 /**
@@ -247,6 +248,30 @@ export class DiscordServiceImpl implements DiscordService {
     return this.postJsonAndCheckStatus(JSON.stringify(params));
   }
 
+  async edits(messageId: string, customId: string, nonce: string): Promise<Message<void>> {
+    // Use edits template (button interaction format)
+    const editsTemplate = this.paramsMap.get('edits');
+    if (editsTemplate) {
+      let paramsStr = this.replaceInteractionParams(editsTemplate, nonce)
+        .replace('$message_id', messageId)
+        .replace('$custom_id', customId);
+      const params = JSON.parse(paramsStr);
+      return this.postJsonAndCheckStatus(JSON.stringify(params));
+    }
+
+    // Fallback: Use custom action format
+    const customActionTemplate = this.paramsMap.get('custom-action');
+    if (customActionTemplate) {
+      let paramsStr = this.replaceInteractionParams(customActionTemplate, nonce)
+        .replace('$message_id', messageId)
+        .replace('$custom_id', customId);
+      const params = JSON.parse(paramsStr);
+      return this.postJsonAndCheckStatus(JSON.stringify(params));
+    }
+
+    return Message.failureWithDescription<void>('Edits template not found');
+  }
+
   async upload(fileName: string, dataUrl: DataUrl): Promise<Message<string>> {
     try {
       // First, request upload URL
@@ -307,6 +332,11 @@ export class DiscordServiceImpl implements DiscordService {
       if (response.status === 200) {
         const attachments = response.data.attachments;
         if (attachments && attachments.length > 0) {
+          // Return message ID if available, otherwise return URL
+          const messageId = response.data.id;
+          if (messageId) {
+            return Message.successWithResult<string>(messageId);
+          }
           return Message.successWithResult<string>(attachments[0].url);
         }
       }

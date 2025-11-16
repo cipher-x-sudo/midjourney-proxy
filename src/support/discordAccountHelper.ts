@@ -106,7 +106,7 @@ export class DiscordAccountHelper {
     const paramsDir = path.join(__dirname, '../../resources/api-params');
 
     try {
-      const files = ['imagine.json', 'upscale.json', 'variation.json', 'reroll.json', 'describe.json', 'shorten.json', 'blend.json', 'message.json', 'custom-action.json', 'modal-submit.json'];
+      const files = ['imagine.json', 'upscale.json', 'variation.json', 'reroll.json', 'describe.json', 'shorten.json', 'blend.json', 'message.json', 'custom-action.json', 'modal-submit.json', 'edits.json'];
       for (const file of files) {
         const filePath = path.join(paramsDir, file);
         if (fs.existsSync(filePath)) {

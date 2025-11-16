@@ -380,6 +380,13 @@ export class DiscordInstanceImpl implements DiscordInstance {
     throw new Error('modalSubmit not implemented');
   }
 
+  async edits(messageId: string, customId: string, nonce: string): Promise<Message<void>> {
+    if (this.service.edits) {
+      return this.service.edits(messageId, customId, nonce);
+    }
+    throw new Error('edits not implemented');
+  }
+
   getConnectionStatus(): {
     connected: boolean;
     running: boolean;

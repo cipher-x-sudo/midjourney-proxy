@@ -1,7 +1,7 @@
 import { SubmitResultVO } from '../models/SubmitResultVO';
 import { Task } from '../models/Task';
 import { BlendDimensions } from '../enums/BlendDimensions';
-import { DataUrl } from '../utils/convertUtils';
+import { DataUrl, convertBase64Array } from '../utils/convertUtils';
 import { DiscordLoadBalancer } from '../loadbalancer/discordLoadBalancer';
 import { DiscordInstance } from '../loadbalancer/discordInstance';
 import { TaskStoreService } from './store/taskStoreService';
@@ -23,6 +23,7 @@ export interface TaskService {
   submitBlend(task: Task, dataUrls: DataUrl[], dimensions: BlendDimensions): Promise<SubmitResultVO>;
   submitCustomAction(task: Task, targetMessageId: string, messageFlags: number, customId: string): Promise<SubmitResultVO>;
   submitModal(task: Task, payload: { modalTaskId: string; prompt?: string; maskBase64?: string }): Promise<SubmitResultVO>;
+  submitEdits(task: Task, imageDataUrl: DataUrl, maskBase64: string, prompt: string): Promise<SubmitResultVO>;
 }
 
 /**
@@ -210,6 +211,81 @@ export class TaskServiceImpl implements TaskService {
     return discordInstance.submitTask(task, () =>
       (discordInstance as any).modalSubmit(payload.modalTaskId, { prompt: payload.prompt, maskBase64: payload.maskBase64 }, nonce || '')
     );
+  }
+
+  async submitEdits(task: Task, imageDataUrl: DataUrl, maskBase64: string, prompt: string): Promise<SubmitResultVO> {
+    const discordInstance = this.discordLoadBalancer.chooseInstance();
+    if (!discordInstance) {
+      return SubmitResultVO.fail(ReturnCode.NOT_FOUND, 'No available account instance');
+    }
+
+    task.setProperty(TASK_PROPERTY_DISCORD_INSTANCE_ID, discordInstance.getInstanceId());
+
+    return discordInstance.submitTask(task, async () => {
+      // Upload the source image
+      const imageFileName = `${task.id}_img.${guessFileSuffix(imageDataUrl.mimeType) || 'png'}`;
+      const imageUploadResult = await discordInstance.upload(imageFileName, imageDataUrl);
+      
+      if (imageUploadResult.getCode() !== ReturnCode.SUCCESS) {
+        return Message.of(imageUploadResult.getCode(), imageUploadResult.getDescription());
+      }
+
+      const imageFinalFileName = imageUploadResult.getResult()!;
+      
+      // Upload the mask image
+      let maskDataUrl: DataUrl;
+      try {
+        const maskDataUrls = convertBase64Array([maskBase64]);
+        maskDataUrl = maskDataUrls[0];
+      } catch (e) {
+        return Message.failureWithDescription<void>('Invalid mask base64 format');
+      }
+
+      const maskFileName = `${task.id}_mask.${guessFileSuffix(maskDataUrl.mimeType) || 'png'}`;
+      const maskUploadResult = await discordInstance.upload(maskFileName, maskDataUrl);
+      
+      if (maskUploadResult.getCode() !== ReturnCode.SUCCESS) {
+        return Message.of(maskUploadResult.getCode(), maskUploadResult.getDescription());
+      }
+
+      const maskFinalFileName = maskUploadResult.getResult()!;
+      
+      // Send source image as message to get image URL for imagine command
+      const sendImageResult = await discordInstance.sendImageMessage(`upload image: ${imageFinalFileName}`, imageFinalFileName);
+      
+      if (sendImageResult.getCode() !== ReturnCode.SUCCESS) {
+        return Message.of(sendImageResult.getCode(), sendImageResult.getDescription());
+      }
+
+      // Get image URL from the response
+      // The response might contain message ID or URL - we need the URL for imagine
+      const imageMessageId = sendImageResult.getResult()!;
+      const imageUrl = `https://cdn.discordapp.com/attachments/${discordInstance.account().channelId}/${imageFinalFileName}`;
+      
+      // Use imagine command with the image and prompt to generate a grid
+      // The grid will have inpaint buttons that we can use
+      const nonce = task.getProperty(TASK_PROPERTY_NONCE);
+      const imagineResult = await discordInstance.imagine(`${imageUrl} ${prompt}`, nonce || '');
+      
+      if (imagineResult.getCode() !== ReturnCode.SUCCESS) {
+        return imagineResult;
+      }
+      
+      // Store mask and prompt for later use when we get the grid message
+      // The WebSocket handler will need to:
+      // 1. Wait for the grid message from the imagine command
+      // 2. Extract the inpaint button custom_id (format: "MJ::Inpaint::1::<hash>::SOLO")
+      // 3. Click the button using customAction
+      // 4. This will return a modal taskId
+      // 5. Submit the modal with maskBase64 and prompt
+      task.setProperty('edits_mask_base64', maskBase64);
+      task.setProperty('edits_prompt', prompt);
+      task.setProperty('edits_mask_filename', maskFinalFileName);
+      
+      // The task will be completed when the WebSocket handler processes the grid message
+      // and completes the inpaint flow
+      return Message.success<void>();
+    });
   }
 }
 

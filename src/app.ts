@@ -161,6 +161,12 @@ export async function createApp(): Promise<FastifyInstance> {
     return submitController.blend(request as any, reply);
   });
 
+  app.post(`${apiPrefix}/submit/edits`, {
+    preHandler: authMiddleware,
+  }, async (request, reply) => {
+    return submitController.edits(request as any, reply);
+  });
+
   // Task routes
   app.get(`${apiPrefix}/task/:id/fetch`, {
     preHandler: authMiddleware,
