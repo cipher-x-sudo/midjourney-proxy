@@ -394,6 +394,13 @@ export class DiscordInstanceImpl implements DiscordInstance {
     throw new Error('submitInpaint not implemented');
   }
 
+  async fetchMessage(messageId: string): Promise<Message<any>> {
+    if (this.service.fetchMessage) {
+      return this.service.fetchMessage(messageId);
+    }
+    throw new Error('fetchMessage not implemented');
+  }
+
   getConnectionStatus(): {
     connected: boolean;
     running: boolean;

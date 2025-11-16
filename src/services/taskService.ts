@@ -23,7 +23,7 @@ export interface TaskService {
   submitBlend(task: Task, dataUrls: DataUrl[], dimensions: BlendDimensions): Promise<SubmitResultVO>;
   submitCustomAction(task: Task, targetMessageId: string, messageFlags: number, customId: string): Promise<SubmitResultVO>;
   submitModal(task: Task, payload: { modalTaskId: string; prompt?: string; maskBase64?: string }): Promise<SubmitResultVO>;
-  submitEdits(task: Task, imageDataUrl: DataUrl, maskBase64: string, prompt: string): Promise<SubmitResultVO>;
+  submitEdits(task: Task, messageId: string, customId: string, maskBase64: string, prompt: string): Promise<SubmitResultVO>;
 }
 
 /**
@@ -213,81 +213,33 @@ export class TaskServiceImpl implements TaskService {
     );
   }
 
-  async submitEdits(task: Task, imageDataUrl: DataUrl, maskBase64: string, prompt: string): Promise<SubmitResultVO> {
-    const discordInstance = this.discordLoadBalancer.chooseInstance();
-    if (!discordInstance) {
-      return SubmitResultVO.fail(ReturnCode.NOT_FOUND, 'No available account instance');
+  async submitEdits(task: Task, messageId: string, customId: string, maskBase64: string, prompt: string): Promise<SubmitResultVO> {
+    const instanceId = task.getProperty(TASK_PROPERTY_DISCORD_INSTANCE_ID);
+    const discordInstance = this.discordLoadBalancer.getDiscordInstance(instanceId);
+    
+    if (!discordInstance || !discordInstance.isAlive()) {
+      return SubmitResultVO.fail(ReturnCode.NOT_FOUND, `Account unavailable: ${instanceId}`);
     }
 
-    task.setProperty(TASK_PROPERTY_DISCORD_INSTANCE_ID, discordInstance.getInstanceId());
-
+    const nonce = task.getProperty(TASK_PROPERTY_NONCE);
+    
     return discordInstance.submitTask(task, async () => {
-      // Upload the source image
-      const imageFileName = `${task.id}_img.${guessFileSuffix(imageDataUrl.mimeType) || 'png'}`;
-      const imageUploadResult = await discordInstance.upload(imageFileName, imageDataUrl);
+      // Step 1: Click the Inpaint button on the existing message
+      // This sends a POST to Discord interactions API (type 3 - message component interaction)
+      const editsResult = await discordInstance.edits(messageId, customId, nonce || '');
       
-      if (imageUploadResult.getCode() !== ReturnCode.SUCCESS) {
-        return Message.of(imageUploadResult.getCode(), imageUploadResult.getDescription());
+      if (editsResult.getCode() !== ReturnCode.SUCCESS) {
+        return editsResult;
       }
 
-      const imageFinalFileName = imageUploadResult.getResult()!;
+      // Step 2: Submit the inpaint job directly to the inpaint API
+      // This sends a POST to https://936929561302675456.discordsays.com/.proxy/inpaint/api/submit-job
+      const inpaintResult = await discordInstance.submitInpaint(customId, maskBase64, prompt);
       
-      // Upload the mask image
-      // maskBase64 can be either raw base64 or data URL format
-      let maskDataUrl: DataUrl;
-      try {
-        // Normalize maskBase64 to data URL format if it's raw base64
-        const normalizedMask = maskBase64.startsWith('data:') 
-          ? maskBase64 
-          : `data:image/png;base64,${maskBase64}`;
-        const maskDataUrls = convertBase64Array([normalizedMask]);
-        maskDataUrl = maskDataUrls[0];
-      } catch (e) {
-        return Message.failureWithDescription<void>(`Invalid mask base64 format: ${e instanceof Error ? e.message : String(e)}`);
+      if (inpaintResult.getCode() !== ReturnCode.SUCCESS) {
+        return inpaintResult;
       }
 
-      const maskFileName = `${task.id}_mask.${guessFileSuffix(maskDataUrl.mimeType) || 'png'}`;
-      const maskUploadResult = await discordInstance.upload(maskFileName, maskDataUrl);
-      
-      if (maskUploadResult.getCode() !== ReturnCode.SUCCESS) {
-        return Message.of(maskUploadResult.getCode(), maskUploadResult.getDescription());
-      }
-
-      const maskFinalFileName = maskUploadResult.getResult()!;
-      
-      // Send source image as message to get image URL for imagine command
-      const sendImageResult = await discordInstance.sendImageMessage(`upload image: ${imageFinalFileName}`, imageFinalFileName);
-      
-      if (sendImageResult.getCode() !== ReturnCode.SUCCESS) {
-        return Message.of(sendImageResult.getCode(), sendImageResult.getDescription());
-      }
-
-      // Get image URL from the response
-      // sendImageMessage returns the actual Discord CDN URL for the image
-      const imageUrl = sendImageResult.getResult()!;
-      
-      // Use imagine command with the image and prompt to generate a grid
-      // The grid will have inpaint buttons that we can use
-      const nonce = task.getProperty(TASK_PROPERTY_NONCE);
-      const imagineResult = await discordInstance.imagine(`${imageUrl} ${prompt}`, nonce || '');
-      
-      if (imagineResult.getCode() !== ReturnCode.SUCCESS) {
-        return imagineResult;
-      }
-      
-      // Store mask and prompt for later use when we get the grid message
-      // The WebSocket handler will need to:
-      // 1. Wait for the grid message from the imagine command
-      // 2. Extract the inpaint button custom_id (format: "MJ::Inpaint::1::<hash>::SOLO")
-      // 3. Call submitInpaint with customId, mask, and prompt using the direct API
-      //    POST https://936929561302675456.discordsays.com/.proxy/inpaint/api/submit-job
-      task.setProperty('edits_mask_base64', maskBase64);
-      task.setProperty('edits_prompt', prompt);
-      task.setProperty('edits_mask_filename', maskFinalFileName);
-      task.setProperty('edits_use_direct_api', 'true'); // Flag to use direct API
-      
-      // The task will be completed when the WebSocket handler processes the grid message
-      // extracts the inpaint button customId, and calls submitInpaint
       return Message.success<void>();
     });
   }

@@ -25,6 +25,7 @@ export interface DiscordService {
   modalSubmit(taskId: string, fields: { prompt?: string; maskBase64?: string }, nonce: string): Promise<Message<void>>;
   edits(messageId: string, customId: string, nonce: string): Promise<Message<void>>;
   submitInpaint(customId: string, maskBase64: string, prompt: string): Promise<Message<void>>;
+  fetchMessage(messageId: string): Promise<Message<any>>;
 }
 
 /**
@@ -451,6 +452,35 @@ export class DiscordServiceImpl implements DiscordService {
       }
       console.error(`[discord-service-${this.account.getDisplay()}] Remove reaction request error:`, error.message);
       return Message.failureWithDescription<void>(error.message);
+    }
+  }
+
+  async fetchMessage(messageId: string): Promise<Message<any>> {
+    try {
+      const discordServer = this.discordHelper.getServer();
+      const messageUrl = `${discordServer}/api/v9/channels/${this.account.channelId}/messages/${messageId}`;
+      
+      console.debug(`[discord-service-${this.account.getDisplay()}] Fetching message ${messageId} from channel ${this.account.channelId}`);
+      
+      const response = await this.httpClient.get(messageUrl);
+      
+      if (response.status === 200) {
+        console.debug(`[discord-service-${this.account.getDisplay()}] Message fetched successfully`);
+        return Message.successWithResult<any>(response.data);
+      }
+      
+      console.warn(`[discord-service-${this.account.getDisplay()}] Fetch message failed - HTTP ${response.status}`);
+      return Message.failureWithDescription<any>(`HTTP ${response.status}`);
+    } catch (error: any) {
+      if (error.response) {
+        const status = error.response.status;
+        const statusText = error.response.statusText;
+        const errorData = error.response.data;
+        console.error(`[discord-service-${this.account.getDisplay()}] Discord fetch message API error - HTTP ${status}: ${statusText}`, errorData);
+        return Message.failureWithDescription<any>(`HTTP ${status}: ${statusText}`);
+      }
+      console.error(`[discord-service-${this.account.getDisplay()}] Fetch message request error:`, error.message);
+      return Message.failureWithDescription<any>(error.message);
     }
   }
 }

@@ -24,6 +24,7 @@ import { guessFileSuffix } from '../utils/mimeTypeUtils';
 import { SnowFlake } from '../utils/snowflake';
 import { TaskChangeParams } from '../utils/taskChangeParams';
 import { parseActionFromCustomId } from '../utils/actionUtils';
+import { ButtonInfo } from '../utils/buttonUtils';
 import {
   TASK_PROPERTY_NOTIFY_HOOK,
   TASK_PROPERTY_NONCE,
@@ -34,6 +35,7 @@ import {
   TASK_PROPERTY_MESSAGE_ID,
   TASK_PROPERTY_MESSAGE_HASH,
   TASK_PROPERTY_REFERENCED_MESSAGE_ID,
+  TASK_PROPERTY_BUTTONS,
 } from '../constants';
 
 /**
@@ -306,6 +308,10 @@ export class SubmitController {
   async edits(request: FastifyRequest<{ Body: SubmitEditsDTO }>, reply: FastifyReply): Promise<SubmitResultVO> {
     const editsDTO = request.body;
 
+    if (!editsDTO.taskId) {
+      return SubmitResultVO.fail(ReturnCode.VALIDATION_ERROR, 'taskId cannot be empty');
+    }
+
     if (!editsDTO.prompt || editsDTO.prompt.trim().length === 0) {
       return SubmitResultVO.fail(ReturnCode.VALIDATION_ERROR, 'prompt cannot be empty');
     }
@@ -314,8 +320,35 @@ export class SubmitController {
       return SubmitResultVO.fail(ReturnCode.VALIDATION_ERROR, 'maskBase64 cannot be empty');
     }
 
-    if (!editsDTO.image || editsDTO.image.trim().length === 0) {
-      return SubmitResultVO.fail(ReturnCode.VALIDATION_ERROR, 'image cannot be empty');
+    // Get the target task
+    const targetTask = await this.taskStoreService.get(editsDTO.taskId);
+    if (!targetTask) {
+      return SubmitResultVO.fail(ReturnCode.NOT_FOUND, 'related task does not exist or has expired');
+    }
+
+    if (targetTask.status !== TaskStatus.SUCCESS) {
+      return SubmitResultVO.fail(ReturnCode.VALIDATION_ERROR, 'related task must be in SUCCESS status');
+    }
+
+    // Get message_id from the target task
+    const messageId = targetTask.getProperty(TASK_PROPERTY_MESSAGE_ID);
+    if (!messageId) {
+      return SubmitResultVO.fail(ReturnCode.VALIDATION_ERROR, 'related task does not have a message_id');
+    }
+
+    // Extract buttons from the target task
+    const buttons = targetTask.getProperty(TASK_PROPERTY_BUTTONS) as ButtonInfo[] | undefined;
+    if (!buttons || !Array.isArray(buttons) || buttons.length === 0) {
+      return SubmitResultVO.fail(ReturnCode.VALIDATION_ERROR, 'related task does not have button information. The message may not have Inpaint button available.');
+    }
+
+    // Find the Inpaint button
+    const inpaintButton = buttons.find(btn => 
+      btn.customId && btn.customId.toLowerCase().includes('inpaint')
+    );
+
+    if (!inpaintButton || !inpaintButton.customId) {
+      return SubmitResultVO.fail(ReturnCode.VALIDATION_ERROR, 'Inpaint button not found in the related task');
     }
 
     let prompt = editsDTO.prompt.trim();
@@ -335,17 +368,15 @@ export class SubmitController {
       throw e;
     }
 
-    let imageDataUrl: DataUrl;
-    try {
-      const dataUrls = convertBase64Array([editsDTO.image]);
-      imageDataUrl = dataUrls[0];
-    } catch (e) {
-      return SubmitResultVO.fail(ReturnCode.VALIDATION_ERROR, 'image format error');
-    }
-
     task.promptEn = promptEn;
     task.description = `/edits ${prompt}`;
-    return this.taskService.submitEdits(task, imageDataUrl, editsDTO.maskBase64, promptEn);
+    
+    // Set properties from target task
+    task.setProperty(TASK_PROPERTY_DISCORD_INSTANCE_ID, targetTask.getProperty(TASK_PROPERTY_DISCORD_INSTANCE_ID));
+    task.setProperty(TASK_PROPERTY_PROGRESS_MESSAGE_ID, messageId);
+    task.setProperty(TASK_PROPERTY_REFERENCED_MESSAGE_ID, messageId);
+
+    return this.taskService.submitEdits(task, messageId, inpaintButton.customId, editsDTO.maskBase64, promptEn);
   }
 
   private newTask(base: any): Task {
