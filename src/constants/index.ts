@@ -34,6 +34,7 @@ export const TASK_PROPERTY_DISCORD_INSTANCE_ID = 'discordInstanceId';
 export const TASK_PROPERTY_REFERENCED_MESSAGE_ID = 'referencedMessageId';
 export const TASK_PROPERTY_SEED = 'seed';
 export const TASK_PROPERTY_SEED_REQUESTED_AT = 'seedRequestedAt';
+export const TASK_PROPERTY_BUTTONS = 'buttons';
 
 /**
  * API secret header name

@@ -7,7 +7,8 @@ import { parseContentWithRegex, ContentParseData } from '../../utils/convertUtil
 import { DiscordHelper } from '../../support/discordHelper';
 import { Task } from '../../models/Task';
 import { TaskCondition } from '../../support/taskCondition';
-import { TASK_PROPERTY_REFERENCED_MESSAGE_ID, TASK_PROPERTY_FINAL_PROMPT, TASK_PROPERTY_MESSAGE_HASH, MJ_MESSAGE_HANDLED } from '../../constants';
+import { TASK_PROPERTY_REFERENCED_MESSAGE_ID, TASK_PROPERTY_FINAL_PROMPT, TASK_PROPERTY_MESSAGE_HASH, TASK_PROPERTY_MESSAGE_ID, MJ_MESSAGE_HANDLED, TASK_PROPERTY_BUTTONS } from '../../constants';
+import { extractButtonsFromMessage } from '../../utils/buttonUtils';
 
 /**
  * U content parse data (with index)
@@ -87,7 +88,47 @@ export class UpscaleSuccessHandler extends MessageHandler {
     if (imageUrl) {
       task.imageUrl = imageUrl;
     }
+    
+    // Extract and store button information from message components
+    const buttons = extractButtonsFromMessage(message);
+    if (buttons.length > 0) {
+      task.setProperty(TASK_PROPERTY_BUTTONS, buttons);
+    }
+    
     this.finishTask(instance, task, message);
+  }
+
+  /**
+   * Override findAndFinishImageTask to also extract buttons for upscale actions
+   */
+  protected findAndFinishImageTask(
+    instance: DiscordInstance,
+    action: TaskAction,
+    finalPrompt: string,
+    message: any
+  ): void {
+    // Extract buttons before calling parent (message might be modified)
+    const buttons = extractButtonsFromMessage(message);
+    
+    // Call parent implementation
+    super.findAndFinishImageTask(instance, action, finalPrompt, message);
+    
+    // Find the task that was just finished and add buttons to it
+    // The parent method sets TASK_PROPERTY_MESSAGE_ID in finishTask
+    const messageId = message.id;
+    if (messageId && buttons.length > 0) {
+      const condition = new TaskCondition()
+        .setActionSet(new Set([action]))
+        .setStatusSet(new Set([TaskStatus.SUCCESS]));
+      
+      // Try to find by message ID first (most reliable)
+      const tasks = instance.findRunningTask(condition.toFunction());
+      const task = tasks.find(t => t.getProperty(TASK_PROPERTY_MESSAGE_ID) === messageId) || null;
+      
+      if (task) {
+        task.setProperty(TASK_PROPERTY_BUTTONS, buttons);
+      }
+    }
   }
 
   private getReferencedMessageId(message: any): string {
