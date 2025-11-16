@@ -567,6 +567,39 @@ export class DiscordServiceImpl implements DiscordService {
         const component = message.components[i];
         const componentType = component.type || 'unknown';
         
+        // Check component-level URL (for iframe components)
+        if (component.url) {
+          const location = `component[${i}].url`;
+          checkedLocations.push(location);
+          foundUrls.push({ url: component.url, location });
+          console.log(`[discord-service-${this.account.getDisplay()}] extractIframeCustomId - Checking ${location}: ${component.url.substring(0, 100)}${component.url.length > 100 ? '...' : ''}`);
+          const customId = this.extractCustomIdFromUrl(component.url);
+          if (customId) {
+            console.log(`[discord-service-${this.account.getDisplay()}] extractIframeCustomId - SUCCESS - Found custom_id in ${location}: ${customId}`);
+            return customId;
+          }
+        }
+        
+        // Check component-level custom_id
+        if (component.custom_id && component.custom_id.includes('MJ::iframe::')) {
+          const location = `component[${i}].custom_id`;
+          checkedLocations.push(location);
+          console.log(`[discord-service-${this.account.getDisplay()}] extractIframeCustomId - SUCCESS - Found iframe custom_id in ${location}: ${component.custom_id}`);
+          return component.custom_id;
+        }
+        
+        // Deep search in component data/metadata
+        if (component.data) {
+          const location = `component[${i}].data`;
+          checkedLocations.push(location);
+          console.log(`[discord-service-${this.account.getDisplay()}] extractIframeCustomId - Checking ${location} for iframe data`);
+          const customIdFromData = this.extractCustomIdFromObject(component.data);
+          if (customIdFromData) {
+            console.log(`[discord-service-${this.account.getDisplay()}] extractIframeCustomId - SUCCESS - Found custom_id in ${location}: ${customIdFromData}`);
+            return customIdFromData;
+          }
+        }
+        
         if (component.components && Array.isArray(component.components)) {
           console.log(`[discord-service-${this.account.getDisplay()}] extractIframeCustomId - Component[${i}]: type=${componentType}, sub-components=${component.components.length}`);
           
@@ -601,6 +634,17 @@ export class DiscordServiceImpl implements DiscordService {
                 return subComponent.custom_id;
               }
             }
+            
+            // Check subComponent data/metadata
+            if (subComponent.data) {
+              const location = `component[${i}].components[${j}].data`;
+              checkedLocations.push(location);
+              const customIdFromData = this.extractCustomIdFromObject(subComponent.data);
+              if (customIdFromData) {
+                console.log(`[discord-service-${this.account.getDisplay()}] extractIframeCustomId - SUCCESS - Found custom_id in ${location}: ${customIdFromData}`);
+                return customIdFromData;
+              }
+            }
           }
         } else {
           console.log(`[discord-service-${this.account.getDisplay()}] extractIframeCustomId - Component[${i}]: type=${componentType}, no sub-components`);
@@ -608,6 +652,18 @@ export class DiscordServiceImpl implements DiscordService {
       }
     } else {
       console.log(`[discord-service-${this.account.getDisplay()}] extractIframeCustomId - No components found or components is not an array`);
+    }
+    
+    // Check interaction metadata (if present)
+    if (message.interaction_metadata) {
+      const location = 'message.interaction_metadata';
+      checkedLocations.push(location);
+      console.log(`[discord-service-${this.account.getDisplay()}] extractIframeCustomId - Checking ${location}`);
+      const customIdFromMetadata = this.extractCustomIdFromObject(message.interaction_metadata);
+      if (customIdFromMetadata) {
+        console.log(`[discord-service-${this.account.getDisplay()}] extractIframeCustomId - SUCCESS - Found custom_id in ${location}: ${customIdFromMetadata}`);
+        return customIdFromMetadata;
+      }
     }
 
     // Check message content for iframe URL
@@ -631,6 +687,17 @@ export class DiscordServiceImpl implements DiscordService {
       console.log(`[discord-service-${this.account.getDisplay()}] extractIframeCustomId - No message.content or content is not a string`);
     }
 
+    // Final fallback: Recursively search the entire message object for iframe custom_id
+    // This catches any iframe data in unexpected locations
+    const location = 'message (recursive search)';
+    checkedLocations.push(location);
+    console.log(`[discord-service-${this.account.getDisplay()}] extractIframeCustomId - Performing recursive search of entire message object...`);
+    const recursiveResult = this.extractCustomIdFromObject(message);
+    if (recursiveResult) {
+      console.log(`[discord-service-${this.account.getDisplay()}] extractIframeCustomId - SUCCESS - Found custom_id via recursive search: ${recursiveResult}`);
+      return recursiveResult;
+    }
+
     // Summary: Log what was checked and what URLs were found
     console.log(`[discord-service-${this.account.getDisplay()}] extractIframeCustomId - SUMMARY: Checked ${checkedLocations.length} location(s), found ${foundUrls.length} URL(s)`);
     console.log(`[discord-service-${this.account.getDisplay()}] extractIframeCustomId - Checked locations: ${checkedLocations.join(', ')}`);
@@ -652,7 +719,77 @@ export class DiscordServiceImpl implements DiscordService {
   }
 
   /**
+   * Recursively search an object for iframe custom_id
+   * @param obj Object to search
+   * @param depth Current recursion depth (max 5 to prevent infinite loops)
+   * @returns The MJ::iframe:: custom_id if found, null otherwise
+   */
+  private extractCustomIdFromObject(obj: any, depth: number = 0): string | null {
+    if (depth > 5 || !obj || typeof obj !== 'object') {
+      return null;
+    }
+
+    // Check if obj itself is a string containing iframe custom_id
+    if (typeof obj === 'string') {
+      if (obj.includes('MJ::iframe::')) {
+        // Extract the full custom_id - matches alphanumeric, hyphens, underscores, and other URL-safe chars
+        const match = obj.match(/MJ::iframe::[A-Za-z0-9_.-]+/);
+        if (match) {
+          return match[0];
+        }
+      }
+      // Also check if it's a URL
+      return this.extractCustomIdFromUrl(obj);
+    }
+
+    // Check direct properties
+    if (obj.custom_id && typeof obj.custom_id === 'string' && obj.custom_id.includes('MJ::iframe::')) {
+      return obj.custom_id;
+    }
+
+    if (obj.customid && typeof obj.customid === 'string' && obj.customid.includes('MJ::iframe::')) {
+      return obj.customid;
+    }
+
+    if (obj.url && typeof obj.url === 'string') {
+      const customId = this.extractCustomIdFromUrl(obj.url);
+      if (customId) {
+        return customId;
+      }
+    }
+
+    // Recursively search nested objects and arrays
+    for (const key in obj) {
+      if (obj.hasOwnProperty(key)) {
+        const value = obj[key];
+        if (value && typeof value === 'object') {
+          const result = this.extractCustomIdFromObject(value, depth + 1);
+          if (result) {
+            return result;
+          }
+        } else if (typeof value === 'string') {
+          if (value.includes('MJ::iframe::')) {
+            // Extract the full custom_id - matches alphanumeric, hyphens, underscores, and other URL-safe chars
+            const match = value.match(/MJ::iframe::[A-Za-z0-9_.-]+/);
+            if (match) {
+              return match[0];
+            }
+          }
+          // Check if it's a URL
+          const customId = this.extractCustomIdFromUrl(value);
+          if (customId) {
+            return customId;
+          }
+        }
+      }
+    }
+
+    return null;
+  }
+
+  /**
    * Extract custom_id from URL if it matches the inpaint iframe pattern
+   * Handles both URL-encoded and plain custom_id parameters
    * @param url URL string to check
    * @returns The MJ::iframe:: custom_id if found, null otherwise
    */
@@ -672,15 +809,29 @@ export class DiscordServiceImpl implements DiscordService {
 
       // Ensure URL has protocol for parsing
       let urlToParse = url;
-      const originalUrl = url;
       if (!urlToParse.startsWith('http://') && !urlToParse.startsWith('https://')) {
         urlToParse = 'https://' + urlToParse;
         console.log(`[discord-service-${this.account.getDisplay()}] extractCustomIdFromUrl - Added https:// protocol: ${urlToParse.substring(0, 100)}...`);
       }
 
-      // Extract custom_id from URL query parameters
+      // Extract custom_id from URL query parameters (handles URL-encoded values)
       const urlObj = new URL(urlToParse);
-      const customId = urlObj.searchParams.get('custom_id');
+      let customId = urlObj.searchParams.get('custom_id');
+      
+      // If custom_id is URL-encoded, decode it
+      if (customId) {
+        try {
+          // Try decoding in case it's double-encoded or has special characters
+          const decoded = decodeURIComponent(customId);
+          if (decoded !== customId) {
+            console.log(`[discord-service-${this.account.getDisplay()}] extractCustomIdFromUrl - Decoded custom_id from URL-encoded: ${decoded.substring(0, 50)}...`);
+            customId = decoded;
+          }
+        } catch (e) {
+          // If decoding fails, use original
+          console.log(`[discord-service-${this.account.getDisplay()}] extractCustomIdFromUrl - Could not decode custom_id, using as-is`);
+        }
+      }
       
       console.log(`[discord-service-${this.account.getDisplay()}] extractCustomIdFromUrl - Extracted custom_id param: ${customId ? customId.substring(0, 50) + '...' : 'null'}`);
       
@@ -689,10 +840,34 @@ export class DiscordServiceImpl implements DiscordService {
         return customId;
       } else {
         console.log(`[discord-service-${this.account.getDisplay()}] extractCustomIdFromUrl - custom_id param does not contain 'MJ::iframe::'`);
+        
+        // Also try to extract from the raw URL string in case it's embedded differently
+        // Look for MJ::iframe:: pattern directly in the URL (handles URL-encoded and plain)
+        // Matches alphanumeric, hyphens, underscores, dots, and other URL-safe chars
+        const directMatch = url.match(/MJ%3A%3Aiframe%3A%3A([A-Za-z0-9_.-]+)/i) || url.match(/MJ::iframe::([A-Za-z0-9_.-]+)/i);
+        if (directMatch) {
+          const extractedCustomId = `MJ::iframe::${directMatch[1]}`;
+          console.log(`[discord-service-${this.account.getDisplay()}] extractCustomIdFromUrl - Found iframe custom_id via direct pattern match: ${extractedCustomId}`);
+          return extractedCustomId;
+        }
       }
     } catch (error: any) {
       // URL parsing failed, not a valid URL or doesn't match pattern
       console.error(`[discord-service-${this.account.getDisplay()}] extractCustomIdFromUrl - Error parsing URL: ${error.message}`, error);
+      
+      // Try regex extraction as fallback
+      try {
+        // Matches alphanumeric, hyphens, underscores, dots, and other URL-safe chars
+        const fallbackMatch = url.match(/MJ%3A%3Aiframe%3A%3A([A-Za-z0-9_.-]+)/i) || url.match(/MJ::iframe::([A-Za-z0-9_.-]+)/i);
+        if (fallbackMatch) {
+          const extractedCustomId = `MJ::iframe::${fallbackMatch[1]}`;
+          console.log(`[discord-service-${this.account.getDisplay()}] extractCustomIdFromUrl - Fallback: Found iframe custom_id via regex: ${extractedCustomId}`);
+          return extractedCustomId;
+        }
+      } catch (regexError) {
+        // Ignore regex errors
+      }
+      
       return null;
     }
 
