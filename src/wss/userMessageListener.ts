@@ -46,7 +46,12 @@ export class UserMessageListener {
       }
     } else {
       // For non-MESSAGE events (like INTERACTION_*), log for debugging
-      console.debug(`[user-message-listener-${this.instance.getInstanceId()}] Received non-MESSAGE event: ${eventType}`);
+      // Especially important for INTERACTION_IFRAME_MODAL_CREATE events
+      if (eventType === 'INTERACTION_IFRAME_MODAL_CREATE' || eventType === 'INTERACTION_MODAL_CREATE') {
+        console.log(`[iframe-event-${this.instance.getInstanceId()}] Received ${eventType} event - passing to handlers`);
+      } else {
+        console.debug(`[user-message-listener-${this.instance.getInstanceId()}] Received non-MESSAGE event: ${eventType}`);
+      }
     }
 
     // Small delay to ensure message is fully processed

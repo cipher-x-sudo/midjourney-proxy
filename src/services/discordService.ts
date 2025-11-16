@@ -755,8 +755,11 @@ export class DiscordServiceImpl implements DiscordService {
           return { custom_id: match[0] };
         }
       }
-      // Also check if it's a URL
-      return this.extractIframeDataFromUrl(obj);
+      // Also check if it's a URL (only if it looks like one)
+      if (this.looksLikeUrl(obj)) {
+        return this.extractIframeDataFromUrl(obj);
+      }
+      return null;
     }
 
     // Check direct properties - prefer URL over custom_id (URL has all three values)
@@ -842,10 +845,12 @@ export class DiscordServiceImpl implements DiscordService {
               return { custom_id: match[0] };
             }
           }
-          // Check if it's a URL
-          const iframeData = this.extractIframeDataFromUrl(value);
-          if (iframeData) {
-            return iframeData;
+          // Check if it's a URL (only if it looks like one to avoid checking every string)
+          if (this.looksLikeUrl(value)) {
+            const iframeData = this.extractIframeDataFromUrl(value);
+            if (iframeData) {
+              return iframeData;
+            }
           }
         }
       }
@@ -865,7 +870,7 @@ export class DiscordServiceImpl implements DiscordService {
     }
 
     // Check direct properties
-    if (obj.url && typeof obj.url === 'string') {
+    if (obj.url && typeof obj.url === 'string' && this.looksLikeUrl(obj.url)) {
       const urlData = this.extractIframeDataFromUrl(obj.url);
       if (urlData) {
         return urlData;
@@ -875,7 +880,7 @@ export class DiscordServiceImpl implements DiscordService {
     // Check common URL property names
     const urlProperties = ['src', 'href', 'iframeUrl', 'iframe_url', 'url', 'source'];
     for (const prop of urlProperties) {
-      if (obj[prop] && typeof obj[prop] === 'string') {
+      if (obj[prop] && typeof obj[prop] === 'string' && this.looksLikeUrl(obj[prop])) {
         const urlData = this.extractIframeDataFromUrl(obj[prop]);
         if (urlData) {
           return urlData;
@@ -889,7 +894,7 @@ export class DiscordServiceImpl implements DiscordService {
         const value = obj[key];
         if (value && typeof value === 'object' && !Array.isArray(value)) {
           // Check nested object's direct properties
-          if (value.url && typeof value.url === 'string') {
+          if (value.url && typeof value.url === 'string' && this.looksLikeUrl(value.url)) {
             const urlData = this.extractIframeDataFromUrl(value.url);
             if (urlData) {
               return urlData;
@@ -898,7 +903,7 @@ export class DiscordServiceImpl implements DiscordService {
         } else if (Array.isArray(value)) {
           // Check array items for URLs
           for (const item of value) {
-            if (item && typeof item === 'object' && item.url && typeof item.url === 'string') {
+            if (item && typeof item === 'object' && item.url && typeof item.url === 'string' && this.looksLikeUrl(item.url)) {
               const urlData = this.extractIframeDataFromUrl(item.url);
               if (urlData) {
                 return urlData;
@@ -910,6 +915,19 @@ export class DiscordServiceImpl implements DiscordService {
     }
 
     return null;
+  }
+
+  /**
+   * Check if a string looks like a URL (to avoid checking every string)
+   * @param str String to check
+   * @returns true if it looks like a URL
+   */
+  private looksLikeUrl(str: string): boolean {
+    if (!str || str.length < 10) {
+      return false;
+    }
+    // Must start with http:// or https:// or contain discordsays.com
+    return str.startsWith('http://') || str.startsWith('https://') || str.includes('discordsays.com');
   }
 
   /**
