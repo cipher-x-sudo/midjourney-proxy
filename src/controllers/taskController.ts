@@ -86,8 +86,9 @@ export class TaskController {
     
     // Then check stored tasks
     if (!task) {
-      console.log(`[task-controller] [3] Checking stored tasks for task ${id}`);
-      task = await this.taskStoreService.get(id);
+      console.log(`[task-controller] [3] Checking stored tasks for task ${id}...`);
+      const storedTask = await this.taskStoreService.get(id);
+      task = storedTask;
       const foundInStore = !!task;
       console.log(`[task-controller] [4] Task ${id} in stored tasks: ${foundInStore ? 'FOUND' : 'NOT FOUND'}`);
     } else {
