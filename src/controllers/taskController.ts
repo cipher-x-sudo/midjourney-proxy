@@ -74,41 +74,30 @@ export class TaskController {
 
   async imageSeed(request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply): Promise<any> {
     const id = request.params.id;
-    console.log(`[task-controller] imageSeed request for task ${id}`);
+    console.log(`[task-controller] ===== imageSeed request for task ${id} =====`);
     
     // Check queue tasks first
     const queueTasks = this.discordLoadBalancer.getQueueTasks();
     const queueTaskIds = queueTasks.map(t => t.id);
-    console.log(`[task-controller] Checking queue tasks (${queueTasks.length} total): ${queueTaskIds.join(', ')}`);
+    console.log(`[task-controller] [1] Checking queue tasks (${queueTasks.length} total): ${queueTaskIds.length > 0 ? queueTaskIds.join(', ') : 'none'}`);
     let task = queueTasks.find(t => t.id === id);
     const foundInQueue = !!task;
-    console.log(`[task-controller] Task ${id} in queue tasks: ${foundInQueue ? 'FOUND' : 'NOT FOUND'}`);
+    console.log(`[task-controller] [2] Task ${id} in queue tasks: ${foundInQueue ? 'FOUND' : 'NOT FOUND'}`);
     
     // Then check stored tasks
     if (!task) {
-      console.log(`[task-controller] Checking stored tasks for task ${id}`);
-      // Also list recent stored task IDs for debugging
-      try {
-        const allStoredTasks = await this.taskStoreService.list();
-        const recentStoredTaskIds = allStoredTasks
-          .filter(t => t.finishTime && (Date.now() - t.finishTime) < 600000) // Last 10 minutes
-          .map(t => t.id)
-          .slice(0, 10); // Show up to 10 most recent
-        console.log(`[task-controller] Recent stored task IDs (last 10 min, max 10): ${recentStoredTaskIds.join(', ') || 'none'}`);
-      } catch (error) {
-        console.warn(`[task-controller] Error listing stored tasks for debugging:`, error);
-      }
-      
+      console.log(`[task-controller] [3] Checking stored tasks for task ${id}`);
       task = await this.taskStoreService.get(id);
       const foundInStore = !!task;
-      console.log(`[task-controller] Task ${id} in stored tasks: ${foundInStore ? 'FOUND' : 'NOT FOUND'}`);
+      console.log(`[task-controller] [4] Task ${id} in stored tasks: ${foundInStore ? 'FOUND' : 'NOT FOUND'}`);
     } else {
-      console.log(`[task-controller] Skipping stored tasks check (task already found in queue)`);
+      console.log(`[task-controller] [3] Skipping stored tasks check (task already found in queue)`);
     }
 
     // Task not found
     if (!task) {
-      console.log(`[task-controller] Task ${id} not found in queue (${queueTasks.length} tasks) or stored tasks`);
+      console.log(`[task-controller] [5] Task ${id} not found in queue or stored tasks`);
+      console.log(`[task-controller] ===== End imageSeed request for task ${id} =====`);
       return {
         code: ReturnCode.NOT_FOUND,
         description: 'Task not found',
@@ -117,7 +106,7 @@ export class TaskController {
 
     // Get seed from task properties
     const seed = task.getProperty(TASK_PROPERTY_SEED);
-    console.log(`[task-controller] Task ${id} seed property: ${seed || 'not set'}`);
+    console.log(`[task-controller] [6] Task ${id} seed property: ${seed || 'not set'}`);
     
     // Get task finish time for better error message
     const finishTime = task.finishTime;
@@ -128,7 +117,8 @@ export class TaskController {
       const ageMessage = taskAge !== null && taskAge < 120000 
         ? ` (task completed ${Math.round(taskAge / 1000)} seconds ago, DM may be delayed)` 
         : '';
-      console.log(`[task-controller] Task ${id} found but seed not available${ageMessage}`);
+      console.log(`[task-controller] [7] Task ${id} found but seed not available${ageMessage}`);
+      console.log(`[task-controller] ===== End imageSeed request for task ${id} =====`);
       return {
         code: ReturnCode.NOT_FOUND,
         description: `Seed not yet received from MidJourney (DM may be delayed)${ageMessage}`,
@@ -136,7 +126,8 @@ export class TaskController {
     }
 
     // Success - return seed
-    console.log(`[task-controller] Task ${id} seed retrieved successfully: ${seed}`);
+    console.log(`[task-controller] [7] Task ${id} seed retrieved successfully: ${seed}`);
+    console.log(`[task-controller] ===== End imageSeed request for task ${id} =====`);
     return {
       code: ReturnCode.SUCCESS,
       description: 'Success',
