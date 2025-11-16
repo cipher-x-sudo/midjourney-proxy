@@ -135,8 +135,18 @@ export class SeedDmHandler extends MessageHandler {
     allCompletedTasks.sort((a, b) => (b.finishTime || 0) - (a.finishTime || 0));
     console.log(`[seed-dm-handler-${instanceId}] Total ${allCompletedTasks.length} candidate tasks found`);
 
-    // Match to the most recent completed task without seed
-    const targetTask = allCompletedTasks.find(task => !task.getProperty(TASK_PROPERTY_SEED));
+    // Prefer tasks that explicitly requested seed recently
+    const preferredCandidates = allCompletedTasks
+      .filter(task => !task.getProperty(TASK_PROPERTY_SEED))
+      .map(task => {
+        const requestedAt = task.getProperty('seedRequestedAt') as number | undefined;
+        return { task, requestedAt: typeof requestedAt === 'number' ? requestedAt : 0 };
+      })
+      .sort((a, b) => (b.requestedAt || 0) - (a.requestedAt || 0))
+      .map(e => e.task);
+
+    // Pick first preferred, else fallback to most recent without seed
+    const targetTask = preferredCandidates[0] || allCompletedTasks.find(task => !task.getProperty(TASK_PROPERTY_SEED));
 
     if (targetTask) {
       targetTask.setProperty(TASK_PROPERTY_SEED, seed);

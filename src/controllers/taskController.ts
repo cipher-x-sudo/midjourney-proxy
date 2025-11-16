@@ -4,7 +4,7 @@ import { TaskConditionDTO } from '../dto/TaskConditionDTO';
 import { TaskStoreService } from '../services/store/taskStoreService';
 import { DiscordLoadBalancer } from '../loadbalancer/discordLoadBalancer';
 import { ReturnCode } from '../constants';
-import { TASK_PROPERTY_SEED, TASK_PROPERTY_MESSAGE_ID, TASK_PROPERTY_DISCORD_INSTANCE_ID } from '../constants';
+import { TASK_PROPERTY_SEED, TASK_PROPERTY_MESSAGE_ID, TASK_PROPERTY_DISCORD_INSTANCE_ID, TASK_PROPERTY_SEED_REQUESTED_AT } from '../constants';
 import { getSeedWaitMs } from '../config';
 
 /**
@@ -171,6 +171,15 @@ export class TaskController {
       if (!messageId || !instance || !instance.account().channelId) {
         console.warn(`[task-controller] [6b] Cannot trigger seed reaction - messageId:${messageId || 'null'}, instance:${instance ? 'ok' : 'null'}, channelId:${instance && instance.account().channelId ? 'ok' : 'null'}`);
       } else {
+        // Mark this task as having requested the seed now, to help DM handler correlate
+        try {
+          task.setProperty(TASK_PROPERTY_SEED_REQUESTED_AT, Date.now());
+          await this.taskStoreService.save(task);
+          console.log(`[task-controller] [6b] Marked seedRequestedAt on task ${id}`);
+        } catch (e: any) {
+          console.warn(`[task-controller] [6b] Failed to persist seedRequestedAt for task ${id}: ${e?.message || e}`);
+        }
+
         const channelId = instance.account().channelId!;
         const envelopeEmoji = '\u{2709}\u{FE0F}'; // ✉️
         try {
