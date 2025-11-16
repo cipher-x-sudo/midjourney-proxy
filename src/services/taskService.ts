@@ -211,7 +211,16 @@ export class TaskServiceImpl implements TaskService {
 
       // Add task to instance's running tasks so it can be found by modal endpoint
       // This is necessary because the modal endpoint checks running tasks before Redis
+      console.log(`[task-service] Adding task ${task.id} to instance ${instanceId} runningTasks for modal lookup`);
       discordInstance.addRunningTask(task);
+      
+      // Verify task was added
+      const addedTask = discordInstance.getRunningTask(task.id!);
+      if (addedTask) {
+        console.log(`[task-service] Successfully added task ${task.id} to runningTasks`);
+      } else {
+        console.error(`[task-service] WARNING: Task ${task.id} was not found in runningTasks after addRunningTask call`);
+      }
 
       // Return EXISTED (code 21) with "Waiting for window confirm"
       return SubmitResultVO.of(ReturnCode.EXISTED, 'Waiting for window confirm', task.id!)

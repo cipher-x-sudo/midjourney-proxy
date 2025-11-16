@@ -292,14 +292,18 @@ export class SubmitController {
     let targetTask: Task | undefined;
     const queueTasks = this.discordLoadBalancer.getQueueTasks();
     targetTask = queueTasks.find((t: Task) => t.id === modalDTO.taskId);
+    console.log(`[modal-controller] Looking for task ${modalDTO.taskId} - queue tasks checked: ${targetTask ? 'found' : 'not found'}`);
     
     // Also check running tasks from all instances
     if (!targetTask) {
       const instances = this.discordLoadBalancer.getAllInstances();
+      console.log(`[modal-controller] Checking ${instances.length} instances for task ${modalDTO.taskId}`);
       for (const instance of instances) {
         const runningTasks = instance.getRunningTasks();
+        console.log(`[modal-controller] Instance ${instance.getInstanceId()} has ${runningTasks.length} running tasks`);
         targetTask = runningTasks.find((t: Task) => t.id === modalDTO.taskId);
         if (targetTask) {
+          console.log(`[modal-controller] Found task ${modalDTO.taskId} in instance ${instance.getInstanceId()} runningTasks`);
           break;
         }
       }
@@ -307,7 +311,13 @@ export class SubmitController {
     
     // If not found in queue or running tasks, check the task store
     if (!targetTask) {
+      console.log(`[modal-controller] Task ${modalDTO.taskId} not in queue or running tasks, checking Redis...`);
       targetTask = await this.taskStoreService.get(modalDTO.taskId);
+      if (targetTask) {
+        console.log(`[modal-controller] Found task ${modalDTO.taskId} in Redis`);
+      } else {
+        console.error(`[modal-controller] Task ${modalDTO.taskId} not found in Redis either`);
+      }
     }
     
     if (!targetTask) {
