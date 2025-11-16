@@ -8,6 +8,11 @@ server:
 logging:
   level: info
 
+debug:
+  # Enable verbose message JSON dumping when iframe extraction fails
+  # Set to false to disable full message JSON dumps in production
+  verboseMessageDump: true
+
 mj:
   taskStore:
     type: in_memory

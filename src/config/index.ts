@@ -100,11 +100,19 @@ export interface LoggingConfig {
 }
 
 /**
+ * Debug configuration
+ */
+export interface DebugConfig {
+  verboseMessageDump?: boolean;
+}
+
+/**
  * Application configuration
  */
 export interface AppConfig {
   server: ServerConfig;
   logging: LoggingConfig;
+  debug?: DebugConfig;
   mj: ProxyProperties;
 }
 
@@ -217,6 +225,9 @@ function loadConfig(): AppConfig {
         logging: {
           level: 'info',
         },
+        debug: {
+          verboseMessageDump: true,
+        },
         mj: {
           taskStore: {
             type: 'in_memory',
@@ -262,6 +273,18 @@ function loadConfig(): AppConfig {
           console.warn(`Failed to parse bodyLimit from config, using default: ${e}`);
           config.server.bodyLimit = 25 * 1024 * 1024; // Default 25MB
         }
+      }
+    }
+
+    // Ensure debug object exists with defaults
+    if (!config.debug) {
+      config.debug = {
+        verboseMessageDump: true,
+      };
+    } else {
+      // Set default if not specified
+      if (config.debug.verboseMessageDump === undefined) {
+        config.debug.verboseMessageDump = true;
       }
     }
 
