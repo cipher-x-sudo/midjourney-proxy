@@ -152,12 +152,6 @@ export class DiscordGateway {
         flush: zlib.constants.Z_SYNC_FLUSH,
       };
       
-      console.debug(`[wss-${this.account.getDisplay()}] [DEBUG] Creating decompressor - ` +
-        `options:${JSON.stringify(decompressorOptions)}, ` +
-        `time:${this.decompressorCreatedTime}, ` +
-        `connectionStartTime:${this.connectionStartTime}, ` +
-        `type:createInflate (zlib with headers)`);
-      
       // Use createInflate instead of createInflateRaw because Discord sends zlib headers
       // The first message contains the zlib header (78 da), subsequent messages are continuation chunks
       this.decompressor = zlib.createInflate(decompressorOptions);
@@ -165,13 +159,9 @@ export class DiscordGateway {
       this.decompressor.on('data', (chunk: Buffer) => {
         // Ignore data if connection is closing
         if (this.sessionClosing) {
-          console.debug(`[wss-${this.account.getDisplay()}] [DEBUG] Ignoring decompressor data - connection is closing`);
           return;
         }
         
-        console.debug(`[wss-${this.account.getDisplay()}] [DEBUG] Decompressor emitted data - ` +
-          `chunkSize:${chunk.length} bytes, ` +
-          `bufferBefore:${this.inflateBuffer.length} bytes`);
         this.inflateBuffer = Buffer.concat([this.inflateBuffer, chunk]);
         // Try to parse complete JSON messages
         this.processInflateBuffer();
@@ -180,68 +170,17 @@ export class DiscordGateway {
       this.decompressor.on('error', (error: Error) => {
         // Ignore errors if connection is already closing
         if (this.sessionClosing) {
-          console.debug(`[wss-${this.account.getDisplay()}] [DEBUG] Decompressor error during cleanup - ignoring: ${error.message}`);
           return;
-        }
-        
-        const now = Date.now();
-        const timeSinceStart = this.connectionStartTime ? (now - this.connectionStartTime) : -1;
-        const timeSinceOpen = this.websocketOpenTime ? (now - this.websocketOpenTime) : -1;
-        const timeSinceLastMessage = this.lastMessageTime ? (now - this.lastMessageTime) : -1;
-        const timeSinceDecompressorCreated = this.decompressorCreatedTime ? (now - this.decompressorCreatedTime) : -1;
-        
-        console.error(`[wss-${this.account.getDisplay()}] [DEBUG] Decompressor error occurred:`, error);
-        console.error(`[wss-${this.account.getDisplay()}] [DEBUG] Error context - ` +
-          `errorName:${error.name}, ` +
-          `errorMessage:${error.message}, ` +
-          `errorCode:${(error as any).code}, ` +
-          `errorErrno:${(error as any).errno}, ` +
-          `timeSinceStart:${timeSinceStart}ms, ` +
-          `timeSinceOpen:${timeSinceOpen}ms, ` +
-          `timeSinceLastMessage:${timeSinceLastMessage}ms, ` +
-          `timeSinceDecompressorCreated:${timeSinceDecompressorCreated}ms, ` +
-          `messageCount:${this.messageCount}, ` +
-          `running:${this.running}, ` +
-          `sessionClosing:${this.sessionClosing}, ` +
-          `decompressorState:${this.getDecompressorState()}, ` +
-          `inflateBufferLength:${this.inflateBuffer.length} bytes, ` +
-          `websocketState:${this.ws ? (this.ws.readyState === WebSocket.OPEN ? 'OPEN' : 'NOT_OPEN') : 'NULL'}`);
-        
-        if (this.lastDataReceived) {
-          console.error(`[wss-${this.account.getDisplay()}] [DEBUG] Last data received before error - ` +
-            `length:${this.lastDataReceived.length} bytes, ` +
-            `hex:${this.getHexDump(this.lastDataReceived)}, ` +
-            `isZlibCompressed:${this.isZlibCompressed(this.lastDataReceived)}, ` +
-            `isJson:${this.isJsonData(this.lastDataReceived)}`);
-        } else {
-          console.error(`[wss-${this.account.getDisplay()}] [DEBUG] No data was received before error`);
-        }
-        
-        if (this.inflateBuffer.length > 0) {
-          console.error(`[wss-${this.account.getDisplay()}] [DEBUG] Inflate buffer contents - ` +
-            `length:${this.inflateBuffer.length} bytes, ` +
-            `firstBytes:${this.getHexDump(this.inflateBuffer, 64)}, ` +
-            `asString:${this.inflateBuffer.slice(0, 200).toString('utf-8').replace(/\n/g, '\\n')}`);
         }
         
         // Decompressor error means the stream is corrupted - cannot recover mid-stream
         // Close the connection and trigger reconnect
         if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-          console.error(`[wss-${this.account.getDisplay()}] [DEBUG] Closing WebSocket due to decompressor error`);
           this.ws.close(DiscordGateway.CLOSE_CODE_EXCEPTION, 'decompressor error');
-        } else {
-          console.error(`[wss-${this.account.getDisplay()}] [DEBUG] WebSocket not open, cannot close - ` +
-            `ws:${this.ws ? 'exists' : 'null'}, ` +
-            `readyState:${this.ws ? this.ws.readyState : 'N/A'}`);
         }
       });
 
       const websocketCreatedTime = Date.now();
-      console.debug(`[wss-${this.account.getDisplay()}] [DEBUG] Creating WebSocket - ` +
-        `url:${gatewayUrl}, ` +
-        `time:${websocketCreatedTime}, ` +
-        `timeSinceConnectionStart:${websocketCreatedTime - this.connectionStartTime!}ms, ` +
-        `timeSinceDecompressorCreated:${websocketCreatedTime - this.decompressorCreatedTime!}ms`);
       
       this.ws = new WebSocket(gatewayUrl, { headers });
 
@@ -471,63 +410,13 @@ export class DiscordGateway {
 
     // Validate decompressor exists and is ready
     if (!this.decompressor) {
-      console.error(`[wss-${this.account.getDisplay()}] [DEBUG] Received data but decompressor not initialized`);
       return;
-    }
-
-    // Check data characteristics
-    const isCompressed = this.isZlibCompressed(data);
-    const isJson = this.isJsonData(data);
-    const decompressorState = this.getDecompressorState();
-    const bufferLength = this.inflateBuffer.length;
-
-    console.debug(`[wss-${this.account.getDisplay()}] [DEBUG] Before writing to decompressor - ` +
-      `isZlibCompressed:${isCompressed}, ` +
-      `isJson:${isJson}, ` +
-      `decompressorState:${decompressorState}, ` +
-      `inflateBufferLength:${bufferLength}, ` +
-      `running:${this.running}, ` +
-      `sessionClosing:${this.sessionClosing}`);
-
-    // In zlib-stream format:
-    // - First message contains zlib header (78 da, etc.)
-    // - Subsequent messages are continuation chunks (no header, just raw deflate data)
-    // So we only check for zlib header on the first message
-    const isFirstMessage = this.messageCount === 1;
-    
-    // Warn if first message doesn't have zlib header (should have one)
-    if (isFirstMessage && !isCompressed && !isJson) {
-      console.warn(`[wss-${this.account.getDisplay()}] [DEBUG] WARNING: First message doesn't have zlib header! ` +
-        `First bytes: ${this.getHexDump(data, 32)}`);
-    }
-    
-    // Warn if we receive JSON data (shouldn't happen with zlib-stream)
-    if (isJson) {
-      console.warn(`[wss-${this.account.getDisplay()}] [DEBUG] WARNING: Received JSON data but expecting zlib-stream! ` +
-        `First bytes: ${this.getHexDump(data, 32)}`);
-    }
-    
-    // Continuation chunks (messageCount > 1) don't have zlib headers - this is normal
-    // Only log if it's the first message and doesn't match expected format
-    if (isFirstMessage && !isCompressed && !isJson && data.length > 0) {
-      console.warn(`[wss-${this.account.getDisplay()}] [DEBUG] WARNING: First message doesn't look like zlib! ` +
-        `First bytes: ${this.getHexDump(data, 32)}`);
     }
 
     try {
       // Write to decompressor - data will be processed in 'data' event
-      console.debug(`[wss-${this.account.getDisplay()}] [DEBUG] Writing ${data.length} bytes to decompressor`);
       this.decompressor.write(data);
-      console.debug(`[wss-${this.account.getDisplay()}] [DEBUG] Successfully wrote to decompressor`);
     } catch (error: any) {
-      console.error(`[wss-${this.account.getDisplay()}] [DEBUG] Error writing to decompressor:`, error);
-      console.error(`[wss-${this.account.getDisplay()}] [DEBUG] Error context - ` +
-        `dataLength:${data.length}, ` +
-        `dataHex:${this.getHexDump(data)}, ` +
-        `decompressorState:${this.getDecompressorState()}, ` +
-        `inflateBufferLength:${this.inflateBuffer.length}, ` +
-        `errorMessage:${error.message}, ` +
-        `errorStack:${error.stack}`);
       // If write fails, close connection to trigger reconnect
       if (this.ws && this.ws.readyState === WebSocket.OPEN) {
         this.ws.close(DiscordGateway.CLOSE_CODE_EXCEPTION, 'decompressor write error');
@@ -933,21 +822,12 @@ export class DiscordGateway {
     // This prevents decompressor from processing data after cleanup starts
     if (this.decompressor) {
       try {
-        const decompressorState = this.getDecompressorState();
-        console.debug(`[wss-${this.account.getDisplay()}] [DEBUG] Cleaning up decompressor - ` +
-          `state:${decompressorState}, ` +
-          `messageCount:${this.messageCount}, ` +
-          `inflateBufferLength:${this.inflateBuffer.length}`);
-        
         // Remove all event listeners FIRST to prevent new events from firing
         this.decompressor.removeAllListeners();
         // Destroy the stream to fully clean up internal state
         this.decompressor.destroy();
-        
-        console.debug(`[wss-${this.account.getDisplay()}] [DEBUG] Decompressor destroyed`);
       } catch (error: any) {
         // Ignore cleanup errors - decompressor may already be destroyed
-        console.debug(`[wss-${this.account.getDisplay()}] [DEBUG] Error during decompressor cleanup: ${error.message}`);
       }
       this.decompressor = null;
       this.decompressorCreatedTime = null;
