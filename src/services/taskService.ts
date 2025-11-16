@@ -9,7 +9,6 @@ import { ReturnCode } from '../constants';
 import { Message } from '../result/Message';
 import { guessFileSuffix } from '../utils/mimeTypeUtils';
 import { TASK_PROPERTY_DISCORD_INSTANCE_ID, TASK_PROPERTY_NONCE } from '../constants';
-import { config } from '../config';
 
 /**
  * Task service interface
@@ -241,119 +240,39 @@ export class TaskServiceImpl implements TaskService {
       return actionResult;
     }
 
-    // Step 2: Wait for Discord to process and update the message with iframe URL
-    // The iframe URL appears with MJ::iframe:: custom_id in URL parameters
-    // Retry with delays in case iframe URL is not immediately available
-    const maxRetries = 5;
-    const retryDelay = 500; // 500ms between retries
+    // Step 2: Wait for WebSocket MESSAGE_UPDATE event containing iframe custom_id
+    // The iframe modal appears via WebSocket events, not HTTP API calls
+    const waitTimeoutMs = 10000; // 10 seconds timeout
     let iframeCustomId: string | null = null;
-    let lastMessage: any = null;
-    let allFoundUrls: Array<{ url: string; location: string }> = [];
 
-    console.log(`[task-service] submitEdits - Step 2: Attempting to extract iframe custom_id from message ${messageId} (max retries: ${maxRetries}, retryDelay: ${retryDelay}ms)`);
+    console.log(`[task-service] submitEdits - Step 2: Waiting for WebSocket MESSAGE_UPDATE event with iframe custom_id for message ${messageId} (timeout: ${waitTimeoutMs}ms)`);
+    const waitStartTime = Date.now();
 
-    for (let attempt = 0; attempt < maxRetries; attempt++) {
-      // Wait before attempting to fetch (except first attempt)
-      if (attempt > 0) {
-        console.log(`[task-service] submitEdits - Step 2: Waiting ${retryDelay}ms before attempt ${attempt + 1}`);
-        await new Promise(resolve => setTimeout(resolve, retryDelay));
-      }
-
-      const attemptStartTime = Date.now();
-      const elapsedSinceButtonClick = attemptStartTime - buttonClickStartTime;
-      console.log(`[task-service] submitEdits - Step 2: Attempt ${attempt + 1}/${maxRetries} - Fetching message ${messageId} (${elapsedSinceButtonClick}ms since button click)`);
-
-      // Fetch the message to get updated embeds/components
-      const messageResult = await discordInstance.fetchMessage(messageId);
+    try {
+      // Wait for WebSocket event that contains the iframe custom_id
+      iframeCustomId = await discordInstance.waitForIframeCustomId(messageId, waitTimeoutMs);
+      const waitElapsed = Date.now() - waitStartTime;
+      const totalElapsed = waitElapsed + buttonClickElapsed;
       
-      if (messageResult.getCode() !== ReturnCode.SUCCESS) {
-        // If fetch fails, continue to next retry
-        console.warn(`[task-service] submitEdits - Step 2: Failed to fetch message ${messageId} on attempt ${attempt + 1}: ${messageResult.getDescription()}`);
-        continue;
-      }
-
-      const message = messageResult.getResult();
-      if (!message) {
-        console.warn(`[task-service] submitEdits - Step 2: Message result is null on attempt ${attempt + 1}`);
-        continue;
-      }
-
-      lastMessage = message; // Store for potential full dump on failure
-      const attemptElapsed = Date.now() - attemptStartTime;
-
-      // Log detailed message structure summary
-      const embedsCount = message.embeds?.length || 0;
-      const componentsCount = message.components?.length || 0;
-      const contentLength = message.content?.length || 0;
-      const hasAttachments = !!message.attachments && message.attachments.length > 0;
+      console.log(`[task-service] submitEdits - Step 2: SUCCESS - Received iframe custom_id via WebSocket: ${iframeCustomId} (${waitElapsed}ms wait, ${totalElapsed}ms total since button click)`);
+    } catch (error: any) {
+      const waitElapsed = Date.now() - waitStartTime;
+      const totalElapsed = waitElapsed + buttonClickElapsed;
       
-      console.log(`[task-service] submitEdits - Step 2: Message fetched successfully on attempt ${attempt + 1} (${attemptElapsed}ms)`);
-      console.log(`[task-service] submitEdits - Message structure summary: embeds=${embedsCount}, components=${componentsCount}, contentLength=${contentLength}, hasAttachments=${hasAttachments}`);
-
-      // Collect all URLs from the message for debugging
-      const urlsInMessage = this.collectUrlsFromMessage(message);
-      allFoundUrls.push(...urlsInMessage.map(url => ({ url, location: `attempt_${attempt + 1}` })));
+      console.error(`[task-service] submitEdits failed at Step 2 - Could not get iframe custom_id from WebSocket event (${waitElapsed}ms wait, ${totalElapsed}ms total): ${error.message}`);
       
-      if (urlsInMessage.length > 0) {
-        console.log(`[task-service] submitEdits - Step 2: Found ${urlsInMessage.length} URL(s) in message on attempt ${attempt + 1}:`);
-        urlsInMessage.forEach((url, idx) => {
-          const truncated = url.length > 150 ? url.substring(0, 150) + '...' : url;
-          console.log(`[task-service] submitEdits - Step 2:   URL[${idx}]: ${truncated}`);
-        });
-      } else {
-        console.log(`[task-service] submitEdits - Step 2: No URLs found in message on attempt ${attempt + 1}`);
-      }
-
-      // Extract MJ::iframe:: custom_id from the message
-      iframeCustomId = discordInstance.extractIframeCustomId(message);
-      
-      if (iframeCustomId) {
-        console.log(`[task-service] submitEdits - Step 2: SUCCESS - Extracted iframe custom_id: ${iframeCustomId} on attempt ${attempt + 1} (${elapsedSinceButtonClick}ms after button click)`);
-        break;
-      } else {
-        console.log(`[task-service] submitEdits - Step 2: No iframe custom_id found on attempt ${attempt + 1}, will retry...`);
-      }
+      return SubmitResultVO.fail(
+        ReturnCode.VALIDATION_ERROR,
+        `Failed to receive iframe custom_id from WebSocket event. The Vary Region/Inpaint button was clicked successfully, but Discord did not send a MESSAGE_UPDATE event with iframe data within ${waitTimeoutMs}ms. Error: ${error.message}`
+      );
     }
 
     // Step 3: Validate that we found the iframe custom_id
     if (!iframeCustomId) {
-      console.error(`[task-service] submitEdits failed at Step 2 - Could not extract iframe custom_id after ${maxRetries} attempts`);
-      
-      // Dump full message JSON from last attempt (if verbose dumping is enabled)
-      if (lastMessage && config.debug?.verboseMessageDump !== false) {
-        console.error(`[task-service] submitEdits - Step 2 FAILURE: Dumping complete message JSON from last attempt:`);
-        try {
-          const messageJson = JSON.stringify(lastMessage, null, 2);
-          // Truncate if too large (over 50000 chars)
-          if (messageJson.length > 50000) {
-            console.error(`[task-service] submitEdits - Message JSON (truncated, original length: ${messageJson.length}):`);
-            console.error(messageJson.substring(0, 50000) + '\n... [TRUNCATED] ...');
-          } else {
-            console.error(messageJson);
-          }
-        } catch (e) {
-          console.error(`[task-service] submitEdits - Failed to stringify message JSON: ${e}`);
-        }
-      } else if (lastMessage && config.debug?.verboseMessageDump === false) {
-        console.error(`[task-service] submitEdits - Step 2 FAILURE: Verbose message dumping is disabled (set debug.verboseMessageDump: true to enable)`);
-      }
-      
-      // Log all URLs found across all attempts
-      if (allFoundUrls.length > 0) {
-        console.error(`[task-service] submitEdits - Step 2 FAILURE: All URLs found across ${maxRetries} attempts (${allFoundUrls.length} total):`);
-        const uniqueUrls = Array.from(new Set(allFoundUrls.map(u => u.url)));
-        uniqueUrls.forEach((url, idx) => {
-          const locations = allFoundUrls.filter(u => u.url === url).map(u => u.location).join(', ');
-          const truncated = url.length > 200 ? url.substring(0, 200) + '...' : url;
-          console.error(`[task-service] submitEdits -   URL[${idx}] (found in: ${locations}): ${truncated}`);
-        });
-      } else {
-        console.error(`[task-service] submitEdits - Step 2 FAILURE: No URLs found in any of the ${maxRetries} attempts`);
-      }
-      
+      console.error(`[task-service] submitEdits failed at Step 2 - iframeCustomId is null after WebSocket wait`);
       return SubmitResultVO.fail(
         ReturnCode.VALIDATION_ERROR,
-        'Failed to extract iframe custom_id from message. The Vary Region/Inpaint button may not have been clicked successfully, or Discord did not respond with an iframe URL.'
+        'Failed to extract iframe custom_id from WebSocket event. The iframe modal may not have appeared.'
       );
     }
 
@@ -376,56 +295,5 @@ export class TaskServiceImpl implements TaskService {
     return SubmitResultVO.of(ReturnCode.SUCCESS, 'Success', task.id!);
   }
 
-  /**
-   * Collect all URLs from a Discord message for debugging purposes
-   * @param message Discord message object
-   * @returns Array of all URLs found in the message
-   */
-  private collectUrlsFromMessage(message: any): string[] {
-    const urls: string[] = [];
-    
-    // Check embeds
-    if (message.embeds && Array.isArray(message.embeds)) {
-      for (const embed of message.embeds) {
-        if (embed.url && typeof embed.url === 'string') {
-          urls.push(embed.url);
-        }
-        if (embed.fields && Array.isArray(embed.fields)) {
-          for (const field of embed.fields) {
-            if (field.value && typeof field.value === 'string') {
-              // Try to extract URLs from field value
-              const urlMatches = field.value.match(/https?:\/\/[^\s<>"{}|\\^`\[\]]+/gi);
-              if (urlMatches) {
-                urls.push(...urlMatches);
-              }
-            }
-          }
-        }
-      }
-    }
-    
-    // Check components
-    if (message.components && Array.isArray(message.components)) {
-      for (const component of message.components) {
-        if (component.components && Array.isArray(component.components)) {
-          for (const subComponent of component.components) {
-            if (subComponent.url && typeof subComponent.url === 'string') {
-              urls.push(subComponent.url);
-            }
-          }
-        }
-      }
-    }
-    
-    // Check message content
-    if (message.content && typeof message.content === 'string') {
-      const urlMatches = message.content.match(/https?:\/\/[^\s<>"{}|\\^`\[\]]+/gi);
-      if (urlMatches) {
-        urls.push(...urlMatches);
-      }
-    }
-    
-    return urls;
-  }
 }
 

@@ -31,6 +31,8 @@ export class DiscordInstanceImpl implements DiscordInstance {
   private queueTasks: Task[] = [];
   private taskFutureMap: Map<string, Promise<any>> = new Map();
   private resumeData: ResumeData | null = null;
+  // Map of messageId -> { resolve, reject, timeout }
+  private pendingIframeExtractions: Map<string, { resolve: (customId: string) => void; reject: (error: Error) => void; timeout: NodeJS.Timeout }> = new Map();
 
   constructor(
     account: DiscordAccount,
@@ -406,6 +408,63 @@ export class DiscordInstanceImpl implements DiscordInstance {
       return this.service.extractIframeCustomId(message);
     }
     return null;
+  }
+
+  /**
+   * Wait for iframe custom_id to appear in WebSocket MESSAGE_UPDATE event
+   * @param messageId The message ID to wait for
+   * @param timeoutMs Maximum time to wait in milliseconds
+   * @returns Promise that resolves with the iframe custom_id
+   */
+  async waitForIframeCustomId(messageId: string, timeoutMs: number): Promise<string> {
+    console.log(`[discord-instance-${this.accountData.getDisplay()}] waitForIframeCustomId - Waiting for iframe custom_id for message ${messageId} (timeout: ${timeoutMs}ms)`);
+    
+    // Check if there's already a pending request for this message ID
+    if (this.pendingIframeExtractions.has(messageId)) {
+      const existing = this.pendingIframeExtractions.get(messageId)!;
+      clearTimeout(existing.timeout);
+      this.pendingIframeExtractions.delete(messageId);
+      console.warn(`[discord-instance-${this.accountData.getDisplay()}] waitForIframeCustomId - Replacing existing pending request for message ${messageId}`);
+    }
+
+    return new Promise<string>((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        this.pendingIframeExtractions.delete(messageId);
+        const error = new Error(`Timeout waiting for iframe custom_id for message ${messageId} after ${timeoutMs}ms`);
+        console.error(`[discord-instance-${this.accountData.getDisplay()}] waitForIframeCustomId - ${error.message}`);
+        reject(error);
+      }, timeoutMs);
+
+      this.pendingIframeExtractions.set(messageId, {
+        resolve: (customId: string) => {
+          clearTimeout(timeout);
+          this.pendingIframeExtractions.delete(messageId);
+          console.log(`[discord-instance-${this.accountData.getDisplay()}] waitForIframeCustomId - Resolved with custom_id: ${customId} for message ${messageId}`);
+          resolve(customId);
+        },
+        reject: (error: Error) => {
+          clearTimeout(timeout);
+          this.pendingIframeExtractions.delete(messageId);
+          console.error(`[discord-instance-${this.accountData.getDisplay()}] waitForIframeCustomId - Rejected for message ${messageId}: ${error.message}`);
+          reject(error);
+        },
+        timeout,
+      });
+    });
+  }
+
+  /**
+   * Notify pending listeners that iframe custom_id was found
+   * Called by IframeCustomIdHandler when it detects iframe in WebSocket event
+   */
+  notifyIframeCustomId(messageId: string, customId: string): void {
+    const pending = this.pendingIframeExtractions.get(messageId);
+    if (pending) {
+      console.log(`[discord-instance-${this.accountData.getDisplay()}] notifyIframeCustomId - Notifying pending listener for message ${messageId} with custom_id: ${customId}`);
+      pending.resolve(customId);
+    } else {
+      console.debug(`[discord-instance-${this.accountData.getDisplay()}] notifyIframeCustomId - No pending listener for message ${messageId}, custom_id: ${customId}`);
+    }
   }
 
   getConnectionStatus(): {

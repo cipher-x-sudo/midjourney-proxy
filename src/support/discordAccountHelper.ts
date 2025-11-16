@@ -18,6 +18,7 @@ import { BlendSuccessHandler } from '../wss/handlers/blendSuccessHandler';
 import { StartAndProgressHandler } from '../wss/handlers/startAndProgressHandler';
 import { ErrorMessageHandler } from '../wss/handlers/errorMessageHandler';
 import { CaptchaEmbeddedHandler } from '../wss/handlers/captchaEmbeddedHandler';
+import { IframeCustomIdHandler } from '../wss/handlers/iframeCustomIdHandler';
 import { ReturnCode } from '../constants';
 import { getLock } from '../utils/asyncLock';
 import * as fs from 'fs';
@@ -129,6 +130,7 @@ export class DiscordAccountHelper {
     return [
       new ErrorMessageHandler(this.discordHelper),
       new CaptchaEmbeddedHandler(this.discordHelper),
+      new IframeCustomIdHandler(this.discordHelper), // Early in chain to catch iframe events quickly
       new SeedDmHandler(this.discordHelper, this.taskStoreService),
       new DescribeSuccessHandler(this.discordHelper),
       new ShortenSuccessHandler(this.discordHelper),

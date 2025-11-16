@@ -41,6 +41,8 @@ export interface DiscordInstance {
   submitInpaint(customId: string, maskBase64: string, prompt: string): Promise<Message<void>>;
   fetchMessage(messageId: string): Promise<Message<any>>;
   extractIframeCustomId(message: any): string | null;
+  waitForIframeCustomId(messageId: string, timeoutMs: number): Promise<string>;
+  notifyIframeCustomId?(messageId: string, customId: string): void;
 
   // Connection status
   getConnectionStatus(): {
