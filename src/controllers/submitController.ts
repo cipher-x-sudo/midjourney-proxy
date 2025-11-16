@@ -255,7 +255,7 @@ export class SubmitController {
     }
 
     const task = this.newTask(actionDTO);
-    task.action = TaskAction.CHANGE;
+    task.action = TaskAction.VARIATION;
     task.prompt = targetTask.prompt;
     task.promptEn = targetTask.promptEn;
     task.setProperty(TASK_PROPERTY_FINAL_PROMPT, targetTask.getProperty(TASK_PROPERTY_FINAL_PROMPT));
@@ -285,7 +285,7 @@ export class SubmitController {
     }
 
     const task = this.newTask(modalDTO);
-    task.action = TaskAction.CHANGE;
+    task.action = TaskAction.VARIATION;
     task.prompt = targetTask.prompt;
     task.promptEn = targetTask.promptEn;
     task.setProperty(TASK_PROPERTY_FINAL_PROMPT, targetTask.getProperty(TASK_PROPERTY_FINAL_PROMPT));
