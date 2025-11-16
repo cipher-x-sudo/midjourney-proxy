@@ -464,6 +464,17 @@ export class DiscordInstanceImpl implements DiscordInstance {
       pending.resolve(customId);
     } else {
       console.debug(`[discord-instance-${this.accountData.getDisplay()}] notifyIframeCustomId - No pending listener for message ${messageId}, custom_id: ${customId}`);
+      
+      // Fallback: If no exact match, try to resolve the most recent pending request
+      // This handles cases where the interaction event doesn't have the exact message_id
+      if (this.pendingIframeExtractions.size > 0) {
+        const pendingEntries = Array.from(this.pendingIframeExtractions.entries());
+        const mostRecent = pendingEntries[pendingEntries.length - 1];
+        console.log(`[discord-instance-${this.accountData.getDisplay()}] notifyIframeCustomId - Fallback: Notifying most recent pending listener (message ${mostRecent[0]}) with custom_id: ${customId}`);
+        mostRecent[1].resolve(customId);
+      } else {
+        console.warn(`[discord-instance-${this.accountData.getDisplay()}] notifyIframeCustomId - No pending listeners at all, custom_id will be lost: ${customId}`);
+      }
     }
   }
 

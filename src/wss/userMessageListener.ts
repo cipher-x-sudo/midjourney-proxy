@@ -29,14 +29,24 @@ export class UserMessageListener {
       return;
     }
 
-    const messageType = getMessageType(raw.t);
-    if (!messageType || messageType === MessageType.DELETE) {
-      return;
-    }
-
+    const eventType = raw.t;
+    const messageType = getMessageType(eventType);
+    
+    // Pass through all events to handlers, not just MESSAGE_* events
+    // This allows handlers to process INTERACTION_* events (like INTERACTION_MODAL_CREATE)
     const data = raw.d;
-    if (this.ignoreAndLogMessage(data, messageType)) {
-      return;
+    
+    // For MESSAGE_* events, use existing filtering logic
+    if (messageType) {
+      if (messageType === MessageType.DELETE) {
+        return;
+      }
+      if (this.ignoreAndLogMessage(data, messageType)) {
+        return;
+      }
+    } else {
+      // For non-MESSAGE events (like INTERACTION_*), log for debugging
+      console.debug(`[user-message-listener-${this.instance.getInstanceId()}] Received non-MESSAGE event: ${eventType}`);
     }
 
     // Small delay to ensure message is fully processed
@@ -45,7 +55,8 @@ export class UserMessageListener {
         if (data[MJ_MESSAGE_HANDLED] === true) {
           return;
         }
-        handler.handle(this.instance!, messageType, data);
+        // Pass both messageType (null for non-MESSAGE events) and raw event type
+        handler.handle(this.instance!, messageType || MessageType.CREATE, data, eventType);
       }
     }, 50);
   }

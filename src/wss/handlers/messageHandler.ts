@@ -27,8 +27,12 @@ export abstract class MessageHandler {
 
   /**
    * Handle message
+   * @param instance Discord instance
+   * @param messageType Message type (may be null for non-MESSAGE events)
+   * @param message Message/event data
+   * @param eventType Raw Discord event type (e.g., "MESSAGE_UPDATE", "INTERACTION_MODAL_CREATE")
    */
-  abstract handle(instance: DiscordInstance, messageType: MessageType, message: any): void;
+  abstract handle(instance: DiscordInstance, messageType: MessageType, message: any, eventType?: string): void;
 
   /**
    * Get handler order (lower = earlier)
