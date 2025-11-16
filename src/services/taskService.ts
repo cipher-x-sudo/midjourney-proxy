@@ -21,6 +21,8 @@ export interface TaskService {
   submitDescribe(task: Task, dataUrl: DataUrl): Promise<SubmitResultVO>;
   submitShorten(task: Task): Promise<SubmitResultVO>;
   submitBlend(task: Task, dataUrls: DataUrl[], dimensions: BlendDimensions): Promise<SubmitResultVO>;
+  submitCustomAction(task: Task, targetMessageId: string, messageFlags: number, customId: string): Promise<SubmitResultVO>;
+  submitModal(task: Task, payload: { modalTaskId: string; prompt?: string; maskBase64?: string }): Promise<SubmitResultVO>;
 }
 
 /**
@@ -179,6 +181,35 @@ export class TaskServiceImpl implements TaskService {
       const nonce = task.getProperty(TASK_PROPERTY_NONCE);
       return discordInstance.blend(finalFileNames, dimensions, nonce || '');
     });
+  }
+
+  async submitCustomAction(task: Task, targetMessageId: string, messageFlags: number, customId: string): Promise<SubmitResultVO> {
+    const instanceId = task.getProperty(TASK_PROPERTY_DISCORD_INSTANCE_ID);
+    const discordInstance = this.discordLoadBalancer.getDiscordInstance(instanceId);
+
+    if (!discordInstance || !discordInstance.isAlive()) {
+      return SubmitResultVO.fail(ReturnCode.NOT_FOUND, `Account unavailable: ${instanceId}`);
+    }
+
+    const nonce = task.getProperty(TASK_PROPERTY_NONCE);
+    return discordInstance.submitTask(task, () =>
+      // messageHash is not required for component interactions
+      (discordInstance as any).customAction(targetMessageId, messageFlags, customId, nonce || '')
+    );
+  }
+
+  async submitModal(task: Task, payload: { modalTaskId: string; prompt?: string; maskBase64?: string }): Promise<SubmitResultVO> {
+    const instanceId = task.getProperty(TASK_PROPERTY_DISCORD_INSTANCE_ID);
+    const discordInstance = this.discordLoadBalancer.getDiscordInstance(instanceId);
+
+    if (!discordInstance || !discordInstance.isAlive()) {
+      return SubmitResultVO.fail(ReturnCode.NOT_FOUND, `Account unavailable: ${instanceId}`);
+    }
+
+    const nonce = task.getProperty(TASK_PROPERTY_NONCE);
+    return discordInstance.submitTask(task, () =>
+      (discordInstance as any).modalSubmit(payload.modalTaskId, { prompt: payload.prompt, maskBase64: payload.maskBase64 }, nonce || '')
+    );
   }
 }
 

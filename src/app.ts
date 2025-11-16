@@ -117,6 +117,20 @@ export async function createApp(): Promise<FastifyInstance> {
     return submitController.imagine(request as any, reply);
   });
 
+  app.post(`${apiPrefix}/submit/action`, {
+    preHandler: authMiddleware,
+  }, async (request, reply) => {
+    // @ts-ignore
+    return submitController.action(request as any, reply);
+  });
+
+  app.post(`${apiPrefix}/submit/modal`, {
+    preHandler: authMiddleware,
+  }, async (request, reply) => {
+    // @ts-ignore
+    return submitController.modal(request as any, reply);
+  });
+
   app.post(`${apiPrefix}/submit/change`, {
     preHandler: authMiddleware,
   }, async (request, reply) => {

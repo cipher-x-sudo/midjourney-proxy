@@ -10,6 +10,8 @@ import { SubmitSimpleChangeDTO } from '../dto/SubmitSimpleChangeDTO';
 import { SubmitDescribeDTO } from '../dto/SubmitDescribeDTO';
 import { SubmitShortenDTO } from '../dto/SubmitShortenDTO';
 import { SubmitBlendDTO } from '../dto/SubmitBlendDTO';
+import { SubmitActionDTO } from '../dto/SubmitActionDTO';
+import { SubmitModalDTO } from '../dto/SubmitModalDTO';
 import { TaskService } from '../services/taskService';
 import { TaskStoreService } from '../services/store/taskStoreService';
 import { TranslateService } from '../services/translate/translateService';
@@ -231,6 +233,71 @@ export class SubmitController {
     task.action = TaskAction.BLEND;
     task.description = `/blend ${task.id} ${dataUrlList.length}`;
     return this.taskService.submitBlend(task, dataUrlList, blendDTO.dimensions);
+  }
+
+  async action(request: FastifyRequest<{ Body: SubmitActionDTO }>, reply: FastifyReply): Promise<SubmitResultVO> {
+    const actionDTO = request.body;
+
+    if (!actionDTO.taskId) {
+      return SubmitResultVO.fail(ReturnCode.VALIDATION_ERROR, 'taskId cannot be empty');
+    }
+    if (!actionDTO.customId || actionDTO.customId.trim().length === 0) {
+      return SubmitResultVO.fail(ReturnCode.VALIDATION_ERROR, 'customId cannot be empty');
+    }
+
+    const targetTask = await this.taskStoreService.get(actionDTO.taskId);
+    if (!targetTask) {
+      return SubmitResultVO.fail(ReturnCode.NOT_FOUND, 'related task does not exist or has expired');
+    }
+
+    if (targetTask.status !== TaskStatus.SUCCESS) {
+      return SubmitResultVO.fail(ReturnCode.VALIDATION_ERROR, 'related task status error');
+    }
+
+    const task = this.newTask(actionDTO);
+    task.action = TaskAction.CHANGE;
+    task.prompt = targetTask.prompt;
+    task.promptEn = targetTask.promptEn;
+    task.setProperty(TASK_PROPERTY_FINAL_PROMPT, targetTask.getProperty(TASK_PROPERTY_FINAL_PROMPT));
+    task.setProperty(TASK_PROPERTY_PROGRESS_MESSAGE_ID, targetTask.getProperty(TASK_PROPERTY_MESSAGE_ID));
+    task.setProperty(TASK_PROPERTY_DISCORD_INSTANCE_ID, targetTask.getProperty(TASK_PROPERTY_DISCORD_INSTANCE_ID));
+    task.description = `/action ${actionDTO.customId}`;
+
+    const messageFlags = targetTask.getProperty(TASK_PROPERTY_FLAGS) || 0;
+    const messageId = targetTask.getProperty(TASK_PROPERTY_MESSAGE_ID);
+    if (!messageId) {
+      return SubmitResultVO.fail(ReturnCode.VALIDATION_ERROR, 'related message not found');
+    }
+
+    return this.taskService.submitCustomAction(task, messageId, messageFlags, actionDTO.customId.trim());
+  }
+
+  async modal(request: FastifyRequest<{ Body: SubmitModalDTO }>, reply: FastifyReply): Promise<SubmitResultVO> {
+    const modalDTO = request.body;
+
+    if (!modalDTO.taskId) {
+      return SubmitResultVO.fail(ReturnCode.VALIDATION_ERROR, 'taskId cannot be empty');
+    }
+
+    const targetTask = await this.taskStoreService.get(modalDTO.taskId);
+    if (!targetTask) {
+      return SubmitResultVO.fail(ReturnCode.NOT_FOUND, 'related task does not exist or has expired');
+    }
+
+    const task = this.newTask(modalDTO);
+    task.action = TaskAction.CHANGE;
+    task.prompt = targetTask.prompt;
+    task.promptEn = targetTask.promptEn;
+    task.setProperty(TASK_PROPERTY_FINAL_PROMPT, targetTask.getProperty(TASK_PROPERTY_FINAL_PROMPT));
+    task.setProperty(TASK_PROPERTY_PROGRESS_MESSAGE_ID, targetTask.getProperty(TASK_PROPERTY_MESSAGE_ID));
+    task.setProperty(TASK_PROPERTY_DISCORD_INSTANCE_ID, targetTask.getProperty(TASK_PROPERTY_DISCORD_INSTANCE_ID));
+    task.description = `/modal ${modalDTO.taskId}`;
+
+    return this.taskService.submitModal(task, {
+      prompt: modalDTO.prompt,
+      maskBase64: modalDTO.maskBase64,
+      modalTaskId: modalDTO.taskId,
+    });
   }
 
   private newTask(base: any): Task {

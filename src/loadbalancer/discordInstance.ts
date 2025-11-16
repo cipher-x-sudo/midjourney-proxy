@@ -35,6 +35,8 @@ export interface DiscordInstance {
   sendImageMessage(content: string, finalFileName: string): Promise<Message<string>>;
   reactWithEmoji(messageId: string, channelId: string, emoji: string): Promise<Message<void>>;
   removeOwnReaction(messageId: string, channelId: string, emoji: string): Promise<Message<void>>;
+  customAction(messageId: string, messageFlags: number, customId: string, nonce: string): Promise<Message<void>>;
+  modalSubmit(taskId: string, fields: { prompt?: string; maskBase64?: string }, nonce: string): Promise<Message<void>>;
 
   // Connection status
   getConnectionStatus(): {

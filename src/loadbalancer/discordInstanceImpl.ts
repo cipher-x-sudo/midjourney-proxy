@@ -366,6 +366,20 @@ export class DiscordInstanceImpl implements DiscordInstance {
     return this.service.removeOwnReaction(messageId, channelId, emoji);
   }
 
+  async customAction(messageId: string, messageFlags: number, customId: string, nonce: string): Promise<Message<void>> {
+    if (this.service.customAction) {
+      return this.service.customAction(messageId, messageFlags, customId, nonce);
+    }
+    throw new Error('customAction not implemented');
+  }
+
+  async modalSubmit(taskId: string, fields: { prompt?: string; maskBase64?: string }, nonce: string): Promise<Message<void>> {
+    if (this.service.modalSubmit) {
+      return this.service.modalSubmit(taskId, fields, nonce);
+    }
+    throw new Error('modalSubmit not implemented');
+  }
+
   getConnectionStatus(): {
     connected: boolean;
     running: boolean;

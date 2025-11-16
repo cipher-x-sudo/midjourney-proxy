@@ -21,6 +21,8 @@ export interface DiscordService {
   sendImageMessage(content: string, finalFileName: string): Promise<Message<string>>;
   reactWithEmoji(messageId: string, channelId: string, emoji: string): Promise<Message<void>>;
   removeOwnReaction(messageId: string, channelId: string, emoji: string): Promise<Message<void>>;
+  customAction(messageId: string, messageFlags: number, customId: string, nonce: string): Promise<Message<void>>;
+  modalSubmit(taskId: string, fields: { prompt?: string; maskBase64?: string }, nonce: string): Promise<Message<void>>;
 }
 
 /**
@@ -216,6 +218,32 @@ export class DiscordServiceImpl implements DiscordService {
     
     params.data.options = options;
     params.data.attachments = attachments;
+    return this.postJsonAndCheckStatus(JSON.stringify(params));
+  }
+
+  async customAction(messageId: string, messageFlags: number, customId: string, nonce: string): Promise<Message<void>> {
+    let paramsStr = this.replaceInteractionParams(this.paramsMap.get('custom-action'), nonce)
+      .replace('$message_id', messageId)
+      .replace('$custom_id', customId);
+    const params = JSON.parse(paramsStr);
+    params.message_flags = messageFlags;
+    return this.postJsonAndCheckStatus(JSON.stringify(params));
+  }
+
+  async modalSubmit(taskId: string, fields: { prompt?: string; maskBase64?: string }, nonce: string): Promise<Message<void>> {
+    let paramsStr = this.replaceInteractionParams(this.paramsMap.get('modal-submit'), nonce)
+      .replace('$task_id', taskId);
+    const params = JSON.parse(paramsStr);
+
+    // Fill fields if present
+    if (fields && params.data) {
+      if (typeof fields.prompt === 'string') {
+        params.data.prompt = fields.prompt;
+      }
+      if (typeof fields.maskBase64 === 'string') {
+        params.data.maskBase64 = fields.maskBase64;
+      }
+    }
     return this.postJsonAndCheckStatus(JSON.stringify(params));
   }
 
