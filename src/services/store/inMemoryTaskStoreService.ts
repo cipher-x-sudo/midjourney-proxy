@@ -19,15 +19,35 @@ export class InMemoryTaskStoreService implements TaskStoreService {
    * Save task
    */
   save(task: Task): void {
+    if (!task || !task.id) {
+      console.error('[task-store-inmemory] Cannot save task: task or task.id is missing', { task: task ? { hasId: !!task.id } : 'null' });
+      return;
+    }
+    
     const expiresAt = Date.now() + (30 * 24 * 60 * 60 * 1000); // Default 30 days
-    this.taskMap.set(task.id!, { task, expiresAt });
+    const wasUpdated = this.taskMap.has(task.id);
+    this.taskMap.set(task.id, { task, expiresAt });
+    
+    const totalTasks = this.taskMap.size;
+    const taskStatus = task.status || 'UNKNOWN';
+    const submitTime = task.submitTime ? new Date(task.submitTime).toISOString() : 'N/A';
+    const finishTime = task.finishTime ? new Date(task.finishTime).toISOString() : 'N/A';
+    
+    console.log(`[task-store-inmemory] ${wasUpdated ? 'Updated' : 'Saved'} task ${task.id}, Status: ${taskStatus}, Submit: ${submitTime}, Finish: ${finishTime}, Total tasks: ${totalTasks}, Expires: ${new Date(expiresAt).toISOString()}`);
   }
 
   /**
    * Delete task
    */
   delete(id: string): void {
+    const existed = this.taskMap.has(id);
     this.taskMap.delete(id);
+    const totalTasks = this.taskMap.size;
+    if (existed) {
+      console.log(`[task-store-inmemory] Deleted task ${id}, Total tasks: ${totalTasks}`);
+    } else {
+      console.log(`[task-store-inmemory] Attempted to delete task ${id} but it doesn't exist, Total tasks: ${totalTasks}`);
+    }
   }
 
   /**

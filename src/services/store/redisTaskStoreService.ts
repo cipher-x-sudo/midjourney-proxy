@@ -26,16 +26,46 @@ export class RedisTaskStoreService implements TaskStoreService {
    * Save task
    */
   async save(task: Task): Promise<void> {
-    const key = this.getRedisKey(task.id!);
-    await this.redis.setex(key, this.timeoutSeconds, JSON.stringify(task));
+    if (!task || !task.id) {
+      console.error('[task-store-redis] Cannot save task: task or task.id is missing', { task: task ? { hasId: !!task.id } : 'null' });
+      return;
+    }
+    
+    try {
+      const key = this.getRedisKey(task.id);
+      const taskJson = JSON.stringify(task);
+      const taskStatus = task.status || 'UNKNOWN';
+      const submitTime = task.submitTime ? new Date(task.submitTime).toISOString() : 'N/A';
+      const finishTime = task.finishTime ? new Date(task.finishTime).toISOString() : 'N/A';
+      
+      console.log(`[task-store-redis] Saving task ${task.id} to Redis, Status: ${taskStatus}, Submit: ${submitTime}, Finish: ${finishTime}, TTL: ${this.timeoutSeconds}s`);
+      
+      await this.redis.setex(key, this.timeoutSeconds, taskJson);
+      
+      console.log(`[task-store-redis] Successfully saved task ${task.id} to Redis`);
+    } catch (error: any) {
+      console.error(`[task-store-redis] Failed to save task ${task?.id || 'unknown'} to Redis:`, error);
+      throw error;
+    }
   }
 
   /**
    * Delete task
    */
-  delete(id: string): Promise<void> {
+  async delete(id: string): Promise<void> {
     const key = this.getRedisKey(id);
-    return this.redis.del(key).then(() => undefined);
+    console.log(`[task-store-redis] Deleting task ${id} from Redis (key: ${key})`);
+    try {
+      const result = await this.redis.del(key);
+      if (result > 0) {
+        console.log(`[task-store-redis] Successfully deleted task ${id} from Redis`);
+      } else {
+        console.log(`[task-store-redis] Task ${id} not found in Redis (key: ${key}), nothing to delete`);
+      }
+    } catch (error: any) {
+      console.error(`[task-store-redis] Failed to delete task ${id} from Redis:`, error);
+      throw error;
+    }
   }
 
   /**

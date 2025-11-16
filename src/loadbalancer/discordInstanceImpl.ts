@@ -156,8 +156,27 @@ export class DiscordInstanceImpl implements DiscordInstance {
   }
 
   async submitTask(task: Task, discordSubmit: () => Promise<Message<void>>): Promise<SubmitResultVO> {
+    // Verify task ID is set
+    if (!task || !task.id) {
+      console.error(`[discord-instance-${this.accountData.getDisplay()}] Cannot submit task: task or task.id is missing`, { task: task ? { hasId: !!task.id } : 'null' });
+      return SubmitResultVO.fail(ReturnCode.FAILURE, 'Task ID is missing');
+    }
+    
+    const taskId = task.id;
+    const taskAction = task.action || 'UNKNOWN';
+    const taskPrompt = task.prompt || 'N/A';
+    
+    console.log(`[discord-instance-${this.accountData.getDisplay()}] Submitting task ${taskId}, Action: ${taskAction}, Prompt: ${taskPrompt}`);
+    
     // Save task
-    await this.taskStoreService.save(task);
+    try {
+      console.log(`[discord-instance-${this.accountData.getDisplay()}] Saving task ${taskId} to store...`);
+      await this.taskStoreService.save(task);
+      console.log(`[discord-instance-${this.accountData.getDisplay()}] Successfully saved task ${taskId} to store`);
+    } catch (error: any) {
+      console.error(`[discord-instance-${this.accountData.getDisplay()}] Failed to save task ${taskId} to store:`, error);
+      return SubmitResultVO.fail(ReturnCode.FAILURE, `Failed to save task: ${error.message}`);
+    }
 
     const currentWaitNumbers = this.queueTasks.length;
 
@@ -178,12 +197,14 @@ export class DiscordInstanceImpl implements DiscordInstance {
           .setProperty(TASK_PROPERTY_DISCORD_INSTANCE_ID, this.getInstanceId());
       }
     } catch (error: any) {
+      console.error(`[discord-instance-${this.accountData.getDisplay()}] submitTask error for task ${taskId}:`, error);
+      console.log(`[discord-instance-${this.accountData.getDisplay()}] Deleting task ${taskId} from store due to error`);
       await this.taskStoreService.delete(task.id!);
       if (error.message?.includes('queue')) {
         return SubmitResultVO.fail(ReturnCode.QUEUE_REJECTED, 'Queue is full, please try again later')
           .setProperty(TASK_PROPERTY_DISCORD_INSTANCE_ID, this.getInstanceId());
       }
-      console.error('submit task error:', error);
+      console.error(`[discord-instance-${this.accountData.getDisplay()}] submit task error:`, error);
       return SubmitResultVO.fail(ReturnCode.FAILURE, 'Submission failed, system error')
         .setProperty(TASK_PROPERTY_DISCORD_INSTANCE_ID, this.getInstanceId());
     }
@@ -232,17 +253,46 @@ export class DiscordInstanceImpl implements DiscordInstance {
   }
 
   private async asyncSaveAndNotify(task: Task): Promise<void> {
+    if (!task || !task.id) {
+      console.error(`[discord-instance-${this.accountData.getDisplay()}] Cannot asyncSaveAndNotify: task or task.id is missing`, { task: task ? { hasId: !!task.id } : 'null' });
+      return;
+    }
+    
+    const taskId = task.id;
+    console.log(`[discord-instance-${this.accountData.getDisplay()}] asyncSaveAndNotify: Scheduling save for task ${taskId}`);
+    
     // Run asynchronously
     setImmediate(() => {
       this.saveAndNotify(task).catch(err => {
-        console.error('Error saving/notifying task:', err);
+        console.error(`[discord-instance-${this.accountData.getDisplay()}] asyncSaveAndNotify: Error saving/notifying task ${taskId}:`, err);
       });
     });
   }
 
   private async saveAndNotify(task: Task): Promise<void> {
-    await this.taskStoreService.save(task);
-    await this.notifyService.notifyTaskChange(task);
+    if (!task || !task.id) {
+      console.error(`[discord-instance-${this.accountData.getDisplay()}] Cannot saveAndNotify: task or task.id is missing`, { task: task ? { hasId: !!task.id } : 'null' });
+      return;
+    }
+    
+    const taskId = task.id;
+    const taskStatus = task.status || 'UNKNOWN';
+    
+    try {
+      console.log(`[discord-instance-${this.accountData.getDisplay()}] saveAndNotify: Saving task ${taskId}, Status: ${taskStatus}`);
+      await this.taskStoreService.save(task);
+      console.log(`[discord-instance-${this.accountData.getDisplay()}] saveAndNotify: Successfully saved task ${taskId}`);
+    } catch (error: any) {
+      console.error(`[discord-instance-${this.accountData.getDisplay()}] saveAndNotify: Failed to save task ${taskId}:`, error);
+      throw error;
+    }
+    
+    try {
+      await this.notifyService.notifyTaskChange(task);
+    } catch (error: any) {
+      console.error(`[discord-instance-${this.accountData.getDisplay()}] saveAndNotify: Failed to notify task ${taskId}:`, error);
+      // Don't throw - notification failure shouldn't block save
+    }
   }
 
   private sleep(ms: number): Promise<void> {
