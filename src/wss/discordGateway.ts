@@ -186,13 +186,6 @@ export class DiscordGateway {
 
       this.ws.on('open', () => {
         this.websocketOpenTime = Date.now();
-        const timeSinceStart = this.websocketOpenTime - this.connectionStartTime!;
-        const timeSinceDecompressorCreated = this.websocketOpenTime - this.decompressorCreatedTime!;
-        
-        console.debug(`[wss-${this.account.getDisplay()}] [DEBUG] WebSocket opened - ` +
-          `time:${this.websocketOpenTime}, ` +
-          `timeSinceStart:${timeSinceStart}ms, ` +
-          `timeSinceDecompressorCreated:${timeSinceDecompressorCreated}ms`);
         
         // Connection opened - resolve immediately
         // The actual connection success is signaled by onSuccess() when READY/RESUMED is received
@@ -200,24 +193,12 @@ export class DiscordGateway {
       });
 
       this.ws.on('message', (data: WebSocket.Data) => {
-        const dataType = Buffer.isBuffer(data) ? 'Buffer' : typeof data;
-        const dataSize = Buffer.isBuffer(data) ? data.length : (typeof data === 'string' ? data.length : 0);
-        
-        console.debug(`[wss-${this.account.getDisplay()}] [DEBUG] WebSocket 'message' event - ` +
-          `type:${dataType}, ` +
-          `size:${dataSize}, ` +
-          `timeSinceOpen:${this.websocketOpenTime ? (Date.now() - this.websocketOpenTime) : -1}ms`);
-        
         if (Buffer.isBuffer(data)) {
           // Handle zlib-stream compression
           this.handleWebSocketMessage(data);
         } else if (typeof data === 'string') {
           // Handle uncompressed messages (shouldn't happen with zlib-stream)
-          console.warn(`[wss-${this.account.getDisplay()}] [DEBUG] WARNING: Received string data but expecting Buffer! ` +
-            `Data: ${data.substring(0, 100)}`);
           this.handleMessage(data);
-        } else {
-          console.error(`[wss-${this.account.getDisplay()}] [DEBUG] ERROR: Received unexpected data type: ${dataType}`);
         }
       });
 
@@ -261,13 +242,11 @@ export class DiscordGateway {
   private handleMessage(json: string): void {
     // Don't process messages if connection is closing or closed
     if (this.sessionClosing) {
-      console.debug(`[wss-${this.account.getDisplay()}] [DEBUG] Ignoring message - connection is closing`);
       return;
     }
     
     // Validate WebSocket is still open
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
-      console.debug(`[wss-${this.account.getDisplay()}] [DEBUG] Ignoring message - WebSocket not open (state: ${this.ws ? this.ws.readyState : 'null'})`);
       return;
     }
     
@@ -371,7 +350,6 @@ export class DiscordGateway {
   private handleWebSocketMessage(data: Buffer): void {
     // Don't process messages if connection is closing
     if (this.sessionClosing) {
-      console.debug(`[wss-${this.account.getDisplay()}] [DEBUG] Ignoring WebSocket message - connection is closing`);
       return;
     }
     
@@ -380,31 +358,14 @@ export class DiscordGateway {
     this.lastDataReceived = data;
     this.messageCount++;
 
-    // Log data arrival
-    const timeSinceOpen = this.websocketOpenTime ? (now - this.websocketOpenTime) : -1;
-    const timeSinceStart = this.connectionStartTime ? (now - this.connectionStartTime) : -1;
-    
-    console.debug(`[wss-${this.account.getDisplay()}] [DEBUG] WebSocket message received - ` +
-      `count:${this.messageCount}, ` +
-      `size:${data.length} bytes, ` +
-      `timeSinceOpen:${timeSinceOpen}ms, ` +
-      `timeSinceStart:${timeSinceStart}ms, ` +
-      `hex:${this.getHexDump(data, 16)}`);
-
     // Validate connection state before processing
     if (!this.ws) {
-      console.error(`[wss-${this.account.getDisplay()}] [DEBUG] WebSocket is null`);
       return;
     }
 
     const wsState = this.ws.readyState;
-    const wsStateStr = wsState === WebSocket.CONNECTING ? 'CONNECTING' :
-                      wsState === WebSocket.OPEN ? 'OPEN' :
-                      wsState === WebSocket.CLOSING ? 'CLOSING' :
-                      wsState === WebSocket.CLOSED ? 'CLOSED' : 'UNKNOWN';
 
     if (wsState !== WebSocket.OPEN) {
-      console.warn(`[wss-${this.account.getDisplay()}] [DEBUG] WebSocket not OPEN, state: ${wsStateStr} - ignoring message`);
       return;
     }
 
