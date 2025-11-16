@@ -34,6 +34,7 @@ export interface DiscordInstance {
   upload(fileName: string, dataUrl: DataUrl): Promise<Message<string>>;
   sendImageMessage(content: string, finalFileName: string): Promise<Message<string>>;
   reactWithEmoji(messageId: string, channelId: string, emoji: string): Promise<Message<void>>;
+  removeOwnReaction(messageId: string, channelId: string, emoji: string): Promise<Message<void>>;
 
   // Connection status
   getConnectionStatus(): {

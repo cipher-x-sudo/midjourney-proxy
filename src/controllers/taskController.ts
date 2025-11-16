@@ -183,6 +183,9 @@ export class TaskController {
         const channelId = instance.account().channelId!;
         const envelopeEmoji = '\u{2709}\u{FE0F}'; // ✉️
         try {
+          // Remove existing reaction and re-send to retrigger DM
+          await instance.removeOwnReaction(messageId, channelId, envelopeEmoji).catch(() => {});
+          await this.sleep(700);
           const reactResult = await instance.reactWithEmoji(messageId, channelId, envelopeEmoji);
           if (reactResult.getCode() !== ReturnCode.SUCCESS) {
             console.warn(`[task-controller] [6c] Seed reaction returned non-success: ${reactResult.getDescription()}`);
@@ -197,6 +200,8 @@ export class TaskController {
         const waitMs = getSeedWaitMs();
         const deadline = Date.now() + waitMs;
         console.log(`[task-controller] [6d] Waiting up to ${waitMs}ms for seed to arrive via DM...`);
+        // Small initial delay to let Discord process reaction and bot respond
+        await this.sleep(800);
         while (Date.now() < deadline) {
           try {
             const refreshed = await this.taskStoreService.get(id);

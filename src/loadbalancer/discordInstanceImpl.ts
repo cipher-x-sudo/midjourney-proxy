@@ -356,6 +356,10 @@ export class DiscordInstanceImpl implements DiscordInstance {
     return this.service.reactWithEmoji(messageId, channelId, emoji);
   }
 
+  async removeOwnReaction(messageId: string, channelId: string, emoji: string): Promise<Message<void>> {
+    return this.service.removeOwnReaction(messageId, channelId, emoji);
+  }
+
   getConnectionStatus(): {
     connected: boolean;
     running: boolean;

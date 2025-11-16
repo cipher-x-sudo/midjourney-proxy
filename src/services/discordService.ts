@@ -20,6 +20,7 @@ export interface DiscordService {
   upload(fileName: string, dataUrl: DataUrl): Promise<Message<string>>;
   sendImageMessage(content: string, finalFileName: string): Promise<Message<string>>;
   reactWithEmoji(messageId: string, channelId: string, emoji: string): Promise<Message<void>>;
+  removeOwnReaction(messageId: string, channelId: string, emoji: string): Promise<Message<void>>;
 }
 
 /**
@@ -314,6 +315,34 @@ export class DiscordServiceImpl implements DiscordService {
         return Message.failureWithDescription<void>(`HTTP ${status}: ${statusText}`);
       }
       console.error(`[discord-service-${this.account.getDisplay()}] Reaction request error:`, error.message);
+      return Message.failureWithDescription<void>(error.message);
+    }
+  }
+
+  async removeOwnReaction(messageId: string, channelId: string, emoji: string): Promise<Message<void>> {
+    try {
+      const discordServer = this.discordHelper.getServer();
+      const encodedEmoji = encodeURIComponent(emoji);
+      const reactionUrl = `${discordServer}/api/v9/channels/${channelId}/messages/${messageId}/reactions/${encodedEmoji}/@me`;
+      
+      console.debug(`[discord-service-${this.account.getDisplay()}] Removing own reaction ${emoji} from message ${messageId} in channel ${channelId}`);
+      
+      const response = await this.httpClient.delete(reactionUrl);
+      if (response.status === 204) {
+        console.debug(`[discord-service-${this.account.getDisplay()}] Reaction removed successfully`);
+        return Message.success<void>();
+      }
+      console.warn(`[discord-service-${this.account.getDisplay()}] Remove reaction failed - HTTP ${response.status}`);
+      return Message.failureWithDescription<void>(`HTTP ${response.status}`);
+    } catch (error: any) {
+      if (error.response) {
+        const status = error.response.status;
+        const statusText = error.response.statusText;
+        const errorData = error.response.data;
+        console.error(`[discord-service-${this.account.getDisplay()}] Discord remove reaction API error - HTTP ${status}: ${statusText}`, errorData);
+        return Message.failureWithDescription<void>(`HTTP ${status}: ${statusText}`);
+      }
+      console.error(`[discord-service-${this.account.getDisplay()}] Remove reaction request error:`, error.message);
       return Message.failureWithDescription<void>(error.message);
     }
   }
