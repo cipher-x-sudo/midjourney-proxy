@@ -221,26 +221,28 @@ export class TaskServiceImpl implements TaskService {
       return SubmitResultVO.fail(ReturnCode.NOT_FOUND, `Account unavailable: ${instanceId}`);
     }
 
-    const nonce = task.getProperty(TASK_PROPERTY_NONCE);
+    const messageFlags = task.getProperty('flags') || 0;
     
-    return discordInstance.submitTask(task, async () => {
-      // Step 1: Click the Inpaint button on the existing message
-      // This sends a POST to Discord interactions API (type 3 - message component interaction)
-      const editsResult = await discordInstance.edits(messageId, customId, nonce || '');
-      
-      if (editsResult.getCode() !== ReturnCode.SUCCESS) {
-        return editsResult;
-      }
+    // Step 1: Click the Inpaint button using submitCustomAction
+    // This will return a modal taskId in the response
+    const actionResult = await this.submitCustomAction(task, messageId, messageFlags, customId);
+    
+    if (actionResult.code !== ReturnCode.SUCCESS) {
+      return actionResult;
+    }
 
-      // Step 2: Submit the inpaint job directly to the inpaint API
-      // This sends a POST to https://936929561302675456.discordsays.com/.proxy/inpaint/api/submit-job
-      const inpaintResult = await discordInstance.submitInpaint(customId, maskBase64, prompt);
-      
-      if (inpaintResult.getCode() !== ReturnCode.SUCCESS) {
-        return inpaintResult;
-      }
+    // Step 2: Get the modal taskId from the action response
+    const modalTaskId = actionResult.result;
+    if (!modalTaskId) {
+      return SubmitResultVO.fail(ReturnCode.VALIDATION_ERROR, 'Modal taskId not returned from action');
+    }
 
-      return Message.success<void>();
+    // Step 3: Submit the modal with mask and prompt
+    // This will handle the inpaint API call internally via Discord's modal submission
+    return this.submitModal(task, {
+      modalTaskId: modalTaskId,
+      maskBase64: maskBase64,
+      prompt: prompt,
     });
   }
 }
