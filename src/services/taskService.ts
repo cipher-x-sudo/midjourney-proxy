@@ -263,9 +263,8 @@ export class TaskServiceImpl implements TaskService {
       }
 
       // Get image URL from the response
-      // The response might contain message ID or URL - we need the URL for imagine
-      const imageMessageId = sendImageResult.getResult()!;
-      const imageUrl = `https://cdn.discordapp.com/attachments/${discordInstance.account().channelId}/${imageFinalFileName}`;
+      // sendImageMessage returns the actual Discord CDN URL for the image
+      const imageUrl = sendImageResult.getResult()!;
       
       // Use imagine command with the image and prompt to generate a grid
       // The grid will have inpaint buttons that we can use

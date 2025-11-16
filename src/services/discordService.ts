@@ -332,11 +332,8 @@ export class DiscordServiceImpl implements DiscordService {
       if (response.status === 200) {
         const attachments = response.data.attachments;
         if (attachments && attachments.length > 0) {
-          // Return message ID if available, otherwise return URL
-          const messageId = response.data.id;
-          if (messageId) {
-            return Message.successWithResult<string>(messageId);
-          }
+          // Return image URL for use in imagine commands
+          // The URL is what's needed for referencing images in prompts
           return Message.successWithResult<string>(attachments[0].url);
         }
       }
