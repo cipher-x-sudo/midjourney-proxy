@@ -209,6 +209,10 @@ export class TaskServiceImpl implements TaskService {
       // Save task state
       await this.taskStoreService.save(task);
 
+      // Add task to instance's running tasks so it can be found by modal endpoint
+      // This is necessary because the modal endpoint checks running tasks before Redis
+      discordInstance.addRunningTask(task);
+
       // Return EXISTED (code 21) with "Waiting for window confirm"
       return SubmitResultVO.of(ReturnCode.EXISTED, 'Waiting for window confirm', task.id!)
         .setProperty(TASK_PROPERTY_FINAL_PROMPT, task.getProperty(TASK_PROPERTY_FINAL_PROMPT) || '')

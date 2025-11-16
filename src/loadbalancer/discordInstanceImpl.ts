@@ -307,6 +307,14 @@ export class DiscordInstanceImpl implements DiscordInstance {
     return new Promise(resolve => setTimeout(resolve, ms));
   }
 
+  addRunningTask(task: Task): void {
+    // Check if task already exists in runningTasks
+    const existingIndex = this.runningTasks.findIndex(t => t.id === task.id);
+    if (existingIndex < 0) {
+      this.runningTasks.push(task);
+    }
+  }
+
   findRunningTask(condition: (task: Task) => boolean): Task[] {
     return this.runningTasks.filter(condition);
   }

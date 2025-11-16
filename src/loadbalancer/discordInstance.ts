@@ -18,6 +18,7 @@ export interface DiscordInstance {
   getRunningTasks(): Task[];
   getQueueTasks(): Task[];
   exitTask(task: Task): void;
+  addRunningTask(task: Task): void;
   getRunningFutures(): Map<string, Promise<any>>;
   submitTask(task: Task, discordSubmit: () => Promise<Message<void>>): Promise<SubmitResultVO>;
   findRunningTask(condition: (task: Task) => boolean): Task[];
