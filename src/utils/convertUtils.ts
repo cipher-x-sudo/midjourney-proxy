@@ -75,6 +75,18 @@ function parseDataUrl(dataUrl: string): DataUrl {
 }
 
 /**
+ * Convert base64 string to data URL format if needed
+ */
+function normalizeToDataUrl(base64: string, defaultMimeType: string = 'image/png'): string {
+  // If it's already a data URL, return as is
+  if (base64.startsWith('data:')) {
+    return base64;
+  }
+  // Otherwise, convert raw base64 to data URL format
+  return `data:${defaultMimeType};base64,${base64}`;
+}
+
+/**
  * Convert base64 array to DataUrl array
  */
 export function convertBase64Array(base64Array: string[]): DataUrl[] {
@@ -83,7 +95,9 @@ export function convertBase64Array(base64Array: string[]): DataUrl[] {
   }
   return base64Array.map(base64 => {
     try {
-      return parseDataUrl(base64);
+      // Normalize to data URL format if needed
+      const dataUrl = normalizeToDataUrl(base64);
+      return parseDataUrl(dataUrl);
     } catch (e) {
       throw new Error(`Invalid base64 data URL: ${e}`);
     }

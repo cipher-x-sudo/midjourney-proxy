@@ -233,12 +233,17 @@ export class TaskServiceImpl implements TaskService {
       const imageFinalFileName = imageUploadResult.getResult()!;
       
       // Upload the mask image
+      // maskBase64 can be either raw base64 or data URL format
       let maskDataUrl: DataUrl;
       try {
-        const maskDataUrls = convertBase64Array([maskBase64]);
+        // Normalize maskBase64 to data URL format if it's raw base64
+        const normalizedMask = maskBase64.startsWith('data:') 
+          ? maskBase64 
+          : `data:image/png;base64,${maskBase64}`;
+        const maskDataUrls = convertBase64Array([normalizedMask]);
         maskDataUrl = maskDataUrls[0];
       } catch (e) {
-        return Message.failureWithDescription<void>('Invalid mask base64 format');
+        return Message.failureWithDescription<void>(`Invalid mask base64 format: ${e instanceof Error ? e.message : String(e)}`);
       }
 
       const maskFileName = `${task.id}_mask.${guessFileSuffix(maskDataUrl.mimeType) || 'png'}`;
