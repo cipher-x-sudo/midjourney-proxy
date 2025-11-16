@@ -214,36 +214,103 @@ export class TaskServiceImpl implements TaskService {
   }
 
   async submitEdits(task: Task, messageId: string, customId: string, maskBase64: string, prompt: string): Promise<SubmitResultVO> {
+    console.log(`[task-service] submitEdits called - taskId: ${task.id}, messageId: ${messageId}, customId: ${customId}, prompt: ${prompt ? prompt.substring(0, 50) : 'empty'}`);
+    
     const instanceId = task.getProperty(TASK_PROPERTY_DISCORD_INSTANCE_ID);
     const discordInstance = this.discordLoadBalancer.getDiscordInstance(instanceId);
     
     if (!discordInstance || !discordInstance.isAlive()) {
+      console.error(`[task-service] submitEdits failed - Account unavailable: ${instanceId}`);
       return SubmitResultVO.fail(ReturnCode.NOT_FOUND, `Account unavailable: ${instanceId}`);
     }
 
     const messageFlags = task.getProperty('flags') || 0;
+    console.log(`[task-service] submitEdits - Step 1: Clicking Inpaint button with messageId: ${messageId}, customId: ${customId}, flags: ${messageFlags}`);
     
     // Step 1: Click the Inpaint button using submitCustomAction
-    // This will return a modal taskId in the response
+    // Discord returns 204 No Content (no body, no modal taskId in response)
     const actionResult = await this.submitCustomAction(task, messageId, messageFlags, customId);
     
+    console.log(`[task-service] submitEdits - Step 1 result: code=${actionResult.code}, description=${actionResult.description}, result=${actionResult.result}`);
+    
     if (actionResult.code !== ReturnCode.SUCCESS) {
+      console.error(`[task-service] submitEdits failed at Step 1 - customAction failed: ${actionResult.description}`);
       return actionResult;
     }
 
-    // Step 2: Get the modal taskId from the action response
-    const modalTaskId = actionResult.result;
-    if (!modalTaskId) {
-      return SubmitResultVO.fail(ReturnCode.VALIDATION_ERROR, 'Modal taskId not returned from action');
+    // Step 2: Wait for Discord to process and update the message with iframe URL
+    // The iframe URL appears with MJ::iframe:: custom_id in URL parameters
+    // Retry with delays in case iframe URL is not immediately available
+    const maxRetries = 5;
+    const retryDelay = 500; // 500ms between retries
+    let iframeCustomId: string | null = null;
+
+    console.log(`[task-service] submitEdits - Step 2: Attempting to extract iframe custom_id from message ${messageId} (max retries: ${maxRetries})`);
+
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      // Wait before attempting to fetch (except first attempt)
+      if (attempt > 0) {
+        console.log(`[task-service] submitEdits - Step 2: Waiting ${retryDelay}ms before attempt ${attempt + 1}`);
+        await new Promise(resolve => setTimeout(resolve, retryDelay));
+      }
+
+      console.log(`[task-service] submitEdits - Step 2: Attempt ${attempt + 1}/${maxRetries} - Fetching message ${messageId}`);
+
+      // Fetch the message to get updated embeds/components
+      const messageResult = await discordInstance.fetchMessage(messageId);
+      
+      if (messageResult.getCode() !== ReturnCode.SUCCESS) {
+        // If fetch fails, continue to next retry
+        console.warn(`[task-service] submitEdits - Step 2: Failed to fetch message ${messageId} on attempt ${attempt + 1}: ${messageResult.getDescription()}`);
+        continue;
+      }
+
+      const message = messageResult.getResult();
+      if (!message) {
+        console.warn(`[task-service] submitEdits - Step 2: Message result is null on attempt ${attempt + 1}`);
+        continue;
+      }
+
+      console.log(`[task-service] submitEdits - Step 2: Message fetched successfully on attempt ${attempt + 1}. Checking for iframe URL...`);
+      console.log(`[task-service] submitEdits - Message structure: hasEmbeds=${!!message.embeds}, embedsCount=${message.embeds?.length || 0}, hasComponents=${!!message.components}, componentsCount=${message.components?.length || 0}, hasContent=${!!message.content}`);
+
+      // Extract MJ::iframe:: custom_id from the message
+      iframeCustomId = discordInstance.extractIframeCustomId(message);
+      
+      if (iframeCustomId) {
+        console.log(`[task-service] submitEdits - Step 2: SUCCESS - Extracted iframe custom_id: ${iframeCustomId} on attempt ${attempt + 1}`);
+        break;
+      } else {
+        console.log(`[task-service] submitEdits - Step 2: No iframe custom_id found on attempt ${attempt + 1}, will retry...`);
+      }
     }
 
-    // Step 3: Submit the modal with mask and prompt
-    // This will handle the inpaint API call internally via Discord's modal submission
-    return this.submitModal(task, {
-      modalTaskId: modalTaskId,
-      maskBase64: maskBase64,
-      prompt: prompt,
-    });
+    // Step 3: Validate that we found the iframe custom_id
+    if (!iframeCustomId) {
+      console.error(`[task-service] submitEdits failed at Step 2 - Could not extract iframe custom_id after ${maxRetries} attempts`);
+      return SubmitResultVO.fail(
+        ReturnCode.VALIDATION_ERROR,
+        'Failed to extract iframe custom_id from message. The Inpaint button may not have been clicked successfully, or Discord did not respond with an iframe URL.'
+      );
+    }
+
+    // Step 4: Submit directly to inpaint API with the MJ::iframe:: custom_id
+    console.log(`[task-service] submitEdits - Step 3: Submitting inpaint job with iframeCustomId: ${iframeCustomId}, maskBase64 length: ${maskBase64?.length || 0}, prompt: ${prompt ? prompt.substring(0, 50) : 'empty'}`);
+    const inpaintResult = await discordInstance.submitInpaint(iframeCustomId, maskBase64, prompt);
+
+    console.log(`[task-service] submitEdits - Step 3 result: code=${inpaintResult.getCode()}, description=${inpaintResult.getDescription()}`);
+
+    if (inpaintResult.getCode() !== ReturnCode.SUCCESS) {
+      console.error(`[task-service] submitEdits failed at Step 3 - submitInpaint failed: ${inpaintResult.getDescription()}`);
+      return SubmitResultVO.fail(
+        ReturnCode.FAILURE,
+        `Failed to submit inpaint job: ${inpaintResult.getDescription()}`
+      );
+    }
+
+    // Return success with task ID
+    console.log(`[task-service] submitEdits - SUCCESS - Task ${task.id} submitted successfully`);
+    return SubmitResultVO.success(task.id!);
   }
 }
 

@@ -401,6 +401,13 @@ export class DiscordInstanceImpl implements DiscordInstance {
     throw new Error('fetchMessage not implemented');
   }
 
+  extractIframeCustomId(message: any): string | null {
+    if (this.service.extractIframeCustomId) {
+      return this.service.extractIframeCustomId(message);
+    }
+    return null;
+  }
+
   getConnectionStatus(): {
     connected: boolean;
     running: boolean;

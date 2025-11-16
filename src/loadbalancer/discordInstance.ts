@@ -40,6 +40,7 @@ export interface DiscordInstance {
   edits(messageId: string, customId: string, nonce: string): Promise<Message<void>>;
   submitInpaint(customId: string, maskBase64: string, prompt: string): Promise<Message<void>>;
   fetchMessage(messageId: string): Promise<Message<any>>;
+  extractIframeCustomId(message: any): string | null;
 
   // Connection status
   getConnectionStatus(): {
