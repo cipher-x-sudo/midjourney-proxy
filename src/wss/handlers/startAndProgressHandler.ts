@@ -26,13 +26,46 @@ export class StartAndProgressHandler extends MessageHandler {
 
     console.log(`[Tracker] Handler called: type=${messageType}, nonce=${nonce || 'none'}, hasParseData=${!!parseData}, messageId=${message.id}`);
 
-    if (messageType === MessageType.CREATE && nonce) {
-      // Task started
-      const task = instance.getRunningTaskByNonce(nonce);
-      console.log(`[Tracker] MESSAGE_CREATE: Found task=${!!task}, taskId=${task?.id || 'none'}, nonce=${nonce}`);
+    if (messageType === MessageType.CREATE) {
+      // Task started - try multiple matching strategies
+      let task: any = null;
+      let matchStrategy: string | null = null;
+
+      // Strategy 1: Match by nonce (primary, most reliable)
+      if (nonce) {
+        task = instance.getRunningTaskByNonce(nonce);
+        if (task) {
+          matchStrategy = 'nonce';
+          console.log(`[Tracker] MESSAGE_CREATE: Matched task ${task.id} by nonce=${nonce}`);
+        } else {
+          console.log(`[Tracker] MESSAGE_CREATE: No task found with nonce=${nonce}`);
+        }
+      } else {
+        console.log(`[Tracker] MESSAGE_CREATE: No nonce provided, trying fallback strategies`);
+      }
+
+      // Strategy 2: Match by prompt (fallback when no nonce)
+      if (!task && parseData?.prompt) {
+        const condition = new TaskCondition()
+          .setStatusSet(new Set([TaskStatus.IN_PROGRESS, TaskStatus.SUBMITTED]))
+          .setFinalPrompt(parseData.prompt);
+        const tasks = instance.findRunningTask(condition.toFunction());
+        // Find task without progressMessageId (hasn't been started yet)
+        task = tasks.find(t => !t.getProperty(TASK_PROPERTY_PROGRESS_MESSAGE_ID)) || null;
+        if (task) {
+          matchStrategy = 'prompt';
+          console.log(`[Tracker] MESSAGE_CREATE: Matched task ${task.id} by prompt="${parseData.prompt?.substring(0, 30)}..."`);
+        } else {
+          console.log(`[Tracker] MESSAGE_CREATE: No task found with prompt="${parseData.prompt?.substring(0, 30)}..." and no progressMessageId`);
+        }
+      }
+
       if (!task) {
+        console.log(`[Tracker] MESSAGE_CREATE: No task matched. nonce=${nonce || 'none'}, prompt=${parseData?.prompt?.substring(0, 30) || 'none'}`);
         return;
       }
+
+      console.log(`[Tracker] MESSAGE_CREATE: ✓ Task ${task.id} matched using strategy: ${matchStrategy}`);
       message[MJ_MESSAGE_HANDLED] = true;
       task.setProperty(TASK_PROPERTY_PROGRESS_MESSAGE_ID, message.id);
       console.log(`[Tracker] MESSAGE_CREATE: Set progressMessageId=${message.id} for task ${task.id}`);
