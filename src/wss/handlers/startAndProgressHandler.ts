@@ -26,18 +26,33 @@ export class StartAndProgressHandler extends MessageHandler {
 
     if (messageType === MessageType.CREATE) {
       // Task started
-      // Use same matching logic as MESSAGE_UPDATE (no nonce matching)
+      
+      // PRIMARY: Try matching by nonce (just like imagine/describe/shorten/blend)
+      // This is critical for inpaint tasks that are submitted like new jobs
+      let task: any = null;
+      let matchStrategy: string | null = null;
+      
+      if (nonce) {
+        task = instance.getRunningTaskByNonce(nonce);
+        if (task) {
+          matchStrategy = 'nonce';
+          console.log(`[start-handler-${instance.getInstanceId()}] MESSAGE_CREATE: ✓ Matched task ${task.id} by nonce: ${nonce}`);
+        }
+      }
       
       // Fallback 1: Try matching by messageId (TASK_PROPERTY_MESSAGE_ID)
-      let condition = new TaskCondition()
-        .setStatusSet(new Set([TaskStatus.IN_PROGRESS, TaskStatus.SUBMITTED]))
-        .setMessageId(message.id);
-      
-      let task = instance.findRunningTask(condition.toFunction()).find(t => t) || null;
-      let matchStrategy = task ? 'messageId' : null;
+      if (!task && message.id) {
+        let condition = new TaskCondition()
+          .setStatusSet(new Set([TaskStatus.IN_PROGRESS, TaskStatus.SUBMITTED]))
+          .setMessageId(message.id);
+        
+        task = instance.findRunningTask(condition.toFunction()).find(t => t) || null;
+        if (task) {
+          matchStrategy = 'messageId';
+        }
+      }
 
       // Fallback 2: Try matching by interactionMetadataId
-      let matchedByInteractionMetadataId = false;
       if (!task && message.interactionMetadata?.id) {
         // TaskCondition doesn't have a method for interactionMetadataId, so use custom function
         const tasks = instance.findRunningTask((t) => {
@@ -49,22 +64,19 @@ export class StartAndProgressHandler extends MessageHandler {
         });
         task = tasks.find(t => t) || null;
         if (task) {
-          matchedByInteractionMetadataId = true;
           matchStrategy = 'interactionMetadataId';
         }
       }
 
       // Fallback 3: Try matching by finalPrompt (parseData.prompt) and status
-      let matchedByFinalPrompt = false;
       if (!task && parseData?.prompt) {
-        condition = new TaskCondition()
+        const condition = new TaskCondition()
           .setStatusSet(new Set([TaskStatus.IN_PROGRESS, TaskStatus.SUBMITTED]))
           .setFinalPrompt(parseData.prompt);
         const tasks = instance.findRunningTask(condition.toFunction());
         // Sort by startTime and take the earliest matching task
         task = tasks.sort((a, b) => (a.startTime || 0) - (b.startTime || 0))[0] || null;
         if (task) {
-          matchedByFinalPrompt = true;
           matchStrategy = 'finalPrompt';
         }
       }
@@ -78,9 +90,9 @@ export class StartAndProgressHandler extends MessageHandler {
 
       message[MJ_MESSAGE_HANDLED] = true;
       task.setProperty(TASK_PROPERTY_PROGRESS_MESSAGE_ID, message.id);
-      // Update messageId to the new message ID when matched by interactionMetadataId or finalPrompt
-      // This is important for modal-submitted tasks where the old messageId was cleared
-      if (message.id && (matchedByInteractionMetadataId || matchedByFinalPrompt)) {
+      // Update messageId to the new message ID when matched by nonce, interactionMetadataId, or finalPrompt
+      // This is important for modal-submitted/inpaint tasks where the old messageId was cleared
+      if (message.id && (matchStrategy === 'nonce' || matchStrategy === 'interactionMetadataId' || matchStrategy === 'finalPrompt')) {
         task.setProperty(TASK_PROPERTY_MESSAGE_ID, message.id);
       }
       // Handle cases where content might be empty
@@ -114,7 +126,6 @@ export class StartAndProgressHandler extends MessageHandler {
       }
 
       // Fallback 2: Try matching by interactionMetadataId
-      let matchedByInteractionMetadataId = false;
       if (!task && message.interactionMetadata?.id) {
         // TaskCondition doesn't have a method for interactionMetadataId, so use custom function
         const tasks = instance.findRunningTask((t) => {
@@ -126,13 +137,11 @@ export class StartAndProgressHandler extends MessageHandler {
         });
         task = tasks.find(t => t) || null;
         if (task) {
-          matchedByInteractionMetadataId = true;
           matchStrategy = 'interactionMetadataId';
         }
       }
 
       // Fallback 3: Try matching by finalPrompt (parseData.prompt) and status
-      let matchedByFinalPrompt = false;
       if (!task && parseData.prompt) {
         condition = new TaskCondition()
           .setStatusSet(new Set([TaskStatus.IN_PROGRESS, TaskStatus.SUBMITTED]))
@@ -141,7 +150,6 @@ export class StartAndProgressHandler extends MessageHandler {
         // Sort by startTime and take the earliest matching task
         task = tasks.sort((a, b) => (a.startTime || 0) - (b.startTime || 0))[0] || null;
         if (task) {
-          matchedByFinalPrompt = true;
           matchStrategy = 'finalPrompt';
         }
       }
@@ -157,7 +165,7 @@ export class StartAndProgressHandler extends MessageHandler {
       task.setProperty(TASK_PROPERTY_FINAL_PROMPT, parseData.prompt);
       // Update messageId to the new message ID when matched by interactionMetadataId or finalPrompt
       // This is important for modal-submitted tasks where the old messageId was cleared
-      if (message.id && (matchedByInteractionMetadataId || matchedByFinalPrompt)) {
+      if (message.id && (matchStrategy === 'interactionMetadataId' || matchStrategy === 'finalPrompt')) {
         task.setProperty(TASK_PROPERTY_MESSAGE_ID, message.id);
       }
       task.status = TaskStatus.IN_PROGRESS;
