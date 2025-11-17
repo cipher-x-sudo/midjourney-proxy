@@ -278,6 +278,24 @@ export class TaskServiceImpl implements TaskService {
             );
           }
 
+          // Save task to store and add to running tasks before returning
+          try {
+            // Ensure task is stamped with instance id for later correlation
+            if (!task.getProperty(TASK_PROPERTY_DISCORD_INSTANCE_ID)) {
+              task.setProperty(TASK_PROPERTY_DISCORD_INSTANCE_ID, discordInstance.getInstanceId());
+            }
+            console.log(`[task-service] submitModal - Saving task ${task.id} to store...`);
+            await this.taskStoreService.save(task);
+            console.log(`[task-service] submitModal - Successfully saved task ${task.id} to store`);
+            
+            // Add to running tasks so it can be found by fetch endpoint
+            discordInstance.addRunningTask(task);
+            console.log(`[task-service] submitModal - Added task ${task.id} to running tasks`);
+          } catch (error: any) {
+            console.error(`[task-service] submitModal - Failed to save task ${task.id} to store:`, error);
+            // Continue with success response even if save fails (task was submitted successfully)
+          }
+
           return SubmitResultVO.of(ReturnCode.SUCCESS, 'Success', task.id!);
         }
       }
@@ -390,6 +408,24 @@ export class TaskServiceImpl implements TaskService {
           ReturnCode.FAILURE,
           `Failed to submit inpaint job: ${inpaintResult.getDescription()}`
         );
+      }
+
+      // Save task to store and add to running tasks before returning
+      try {
+        // Ensure task is stamped with instance id for later correlation
+        if (!task.getProperty(TASK_PROPERTY_DISCORD_INSTANCE_ID)) {
+          task.setProperty(TASK_PROPERTY_DISCORD_INSTANCE_ID, discordInstance.getInstanceId());
+        }
+        console.log(`[task-service] submitModal - Saving task ${task.id} to store...`);
+        await this.taskStoreService.save(task);
+        console.log(`[task-service] submitModal - Successfully saved task ${task.id} to store`);
+        
+        // Add to running tasks so it can be found by fetch endpoint
+        discordInstance.addRunningTask(task);
+        console.log(`[task-service] submitModal - Added task ${task.id} to running tasks`);
+      } catch (error: any) {
+        console.error(`[task-service] submitModal - Failed to save task ${task.id} to store:`, error);
+        // Continue with success response even if save fails (task was submitted successfully)
       }
 
       return SubmitResultVO.of(ReturnCode.SUCCESS, 'Success', task.id!);
