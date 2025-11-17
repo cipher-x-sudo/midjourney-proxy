@@ -264,12 +264,14 @@ export class TaskServiceImpl implements TaskService {
       const startTime = Date.now();
 
       while (true) {
-        // Get fresh task state
-        const currentTask = discordInstance.getRunningTask(task.id!);
+        // Get fresh task state - use modalTaskId to get the MODAL task, not the new task's ID
+        const modalTaskId = payload.modalTaskId;
+        const currentTask = discordInstance.getRunningTask(modalTaskId);
         if (!currentTask) {
           // Try to get from task store
-          const storedTask = await this.taskStoreService.get(task.id!);
+          const storedTask = await this.taskStoreService.get(modalTaskId);
           if (!storedTask) {
+            console.error(`[task-service] submitModal - Task ${modalTaskId} not found in runningTasks or Redis`);
             return SubmitResultVO.fail(ReturnCode.NOT_FOUND, 'Task not found');
           }
           
