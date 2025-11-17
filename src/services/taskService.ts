@@ -288,9 +288,10 @@ export class TaskServiceImpl implements TaskService {
             task.setProperty(TASK_PROPERTY_FINAL_PROMPT, prompt);
           }
 
-          // Clear progressMessageId and messageId so handler can match by interactionMetadataId or finalPrompt instead
+          // Clear progressMessageId so handler can match by interactionMetadataId or finalPrompt instead
           // The new message from Discord will have a different message ID
           task.setProperty(TASK_PROPERTY_PROGRESS_MESSAGE_ID, undefined);
+          // Also clear messageId since a new message will be created after modal submission
           task.setProperty(TASK_PROPERTY_MESSAGE_ID, undefined);
           
           // Copy interactionMetadataId from modalTask if available (for matching new messages)
@@ -442,9 +443,10 @@ export class TaskServiceImpl implements TaskService {
         task.setProperty(TASK_PROPERTY_FINAL_PROMPT, prompt);
       }
 
-      // Clear progressMessageId and messageId so handler can match by interactionMetadataId or finalPrompt instead
+      // Clear progressMessageId so handler can match by interactionMetadataId or finalPrompt instead
       // The new message from Discord will have a different message ID
       task.setProperty(TASK_PROPERTY_PROGRESS_MESSAGE_ID, undefined);
+      // Also clear messageId since a new message will be created after modal submission
       task.setProperty(TASK_PROPERTY_MESSAGE_ID, undefined);
       
       // Copy interactionMetadataId from modalTask if available (for matching new messages)
@@ -573,9 +575,10 @@ export class TaskServiceImpl implements TaskService {
       task.setProperty(TASK_PROPERTY_FINAL_PROMPT, prompt);
     }
 
-    // Clear progressMessageId and messageId so handler can match by interactionMetadataId or finalPrompt instead
+    // Clear progressMessageId so handler can match by interactionMetadataId or finalPrompt instead
     // The new message from Discord will have a different message ID
     task.setProperty(TASK_PROPERTY_PROGRESS_MESSAGE_ID, undefined);
+    // Also clear messageId since a new message will be created after modal submission
     task.setProperty(TASK_PROPERTY_MESSAGE_ID, undefined);
 
     // Save task to store and add to running tasks before returning

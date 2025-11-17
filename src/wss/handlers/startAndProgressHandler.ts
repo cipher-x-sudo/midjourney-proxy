@@ -32,6 +32,10 @@ export class StartAndProgressHandler extends MessageHandler {
       }
       message[MJ_MESSAGE_HANDLED] = true;
       task.setProperty(TASK_PROPERTY_PROGRESS_MESSAGE_ID, message.id);
+      // Update messageId to the new message ID (especially important for modal-submitted tasks)
+      if (message.id) {
+        task.setProperty(TASK_PROPERTY_MESSAGE_ID, message.id);
+      }
       // Handle cases where content might be empty
       if (parseData) {
         task.setProperty(TASK_PROPERTY_FINAL_PROMPT, parseData.prompt);
@@ -59,6 +63,7 @@ export class StartAndProgressHandler extends MessageHandler {
       }
 
       // Fallback 2: Try matching by interactionMetadataId
+      let matchedByInteractionMetadataId = false;
       if (!task && message.interactionMetadata?.id) {
         // TaskCondition doesn't have a method for interactionMetadataId, so use custom function
         const tasks = instance.findRunningTask((t) => {
@@ -69,9 +74,13 @@ export class StartAndProgressHandler extends MessageHandler {
           return interactionMetadataId === message.interactionMetadata.id;
         });
         task = tasks.find(t => t) || null;
+        if (task) {
+          matchedByInteractionMetadataId = true;
+        }
       }
 
       // Fallback 3: Try matching by finalPrompt (parseData.prompt) and status
+      let matchedByFinalPrompt = false;
       if (!task && parseData.prompt) {
         condition = new TaskCondition()
           .setStatusSet(new Set([TaskStatus.IN_PROGRESS, TaskStatus.SUBMITTED]))
@@ -79,6 +88,9 @@ export class StartAndProgressHandler extends MessageHandler {
         const tasks = instance.findRunningTask(condition.toFunction());
         // Sort by startTime and take the earliest matching task
         task = tasks.sort((a, b) => (a.startTime || 0) - (b.startTime || 0))[0] || null;
+        if (task) {
+          matchedByFinalPrompt = true;
+        }
       }
 
       if (!task) {
@@ -87,6 +99,11 @@ export class StartAndProgressHandler extends MessageHandler {
 
       message[MJ_MESSAGE_HANDLED] = true;
       task.setProperty(TASK_PROPERTY_FINAL_PROMPT, parseData.prompt);
+      // Update messageId to the new message ID when matched by interactionMetadataId or finalPrompt
+      // This is important for modal-submitted tasks where the old messageId was cleared
+      if (message.id && (matchedByInteractionMetadataId || matchedByFinalPrompt)) {
+        task.setProperty(TASK_PROPERTY_MESSAGE_ID, message.id);
+      }
       task.status = TaskStatus.IN_PROGRESS;
       task.progress = parseData.status;
       
