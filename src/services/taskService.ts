@@ -288,9 +288,10 @@ export class TaskServiceImpl implements TaskService {
             task.setProperty(TASK_PROPERTY_FINAL_PROMPT, prompt);
           }
 
-          // Clear progressMessageId so handler can match by interactionMetadataId or finalPrompt instead
+          // Clear progressMessageId and messageId so handler can match by interactionMetadataId or finalPrompt instead
           // The new message from Discord will have a different message ID
           task.setProperty(TASK_PROPERTY_PROGRESS_MESSAGE_ID, undefined);
+          task.setProperty(TASK_PROPERTY_MESSAGE_ID, undefined);
           
           // Copy interactionMetadataId from modalTask if available (for matching new messages)
           const modalInteractionMetadataId = modalTask.getProperty(TASK_PROPERTY_INTERACTION_METADATA_ID);
@@ -441,9 +442,10 @@ export class TaskServiceImpl implements TaskService {
         task.setProperty(TASK_PROPERTY_FINAL_PROMPT, prompt);
       }
 
-      // Clear progressMessageId so handler can match by interactionMetadataId or finalPrompt instead
+      // Clear progressMessageId and messageId so handler can match by interactionMetadataId or finalPrompt instead
       // The new message from Discord will have a different message ID
       task.setProperty(TASK_PROPERTY_PROGRESS_MESSAGE_ID, undefined);
+      task.setProperty(TASK_PROPERTY_MESSAGE_ID, undefined);
       
       // Copy interactionMetadataId from modalTask if available (for matching new messages)
       const modalInteractionMetadataId = finalTask?.getProperty(TASK_PROPERTY_INTERACTION_METADATA_ID);
@@ -571,9 +573,10 @@ export class TaskServiceImpl implements TaskService {
       task.setProperty(TASK_PROPERTY_FINAL_PROMPT, prompt);
     }
 
-    // Clear progressMessageId so handler can match by interactionMetadataId or finalPrompt instead
+    // Clear progressMessageId and messageId so handler can match by interactionMetadataId or finalPrompt instead
     // The new message from Discord will have a different message ID
     task.setProperty(TASK_PROPERTY_PROGRESS_MESSAGE_ID, undefined);
+    task.setProperty(TASK_PROPERTY_MESSAGE_ID, undefined);
 
     // Save task to store and add to running tasks before returning
     try {
