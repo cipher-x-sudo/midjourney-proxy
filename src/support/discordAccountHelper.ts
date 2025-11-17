@@ -10,6 +10,7 @@ import { MessageHandler } from '../wss/handlers/messageHandler';
 import { ImagineSuccessHandler } from '../wss/handlers/imagineSuccessHandler';
 import { UpscaleSuccessHandler } from '../wss/handlers/upscaleSuccessHandler';
 import { VariationSuccessHandler } from '../wss/handlers/variationSuccessHandler';
+import { VaryRegionSuccessHandler } from '../wss/handlers/varyRegionSuccessHandler';
 import { RerollSuccessHandler } from '../wss/handlers/rerollSuccessHandler';
 import { DescribeSuccessHandler } from '../wss/handlers/describeSuccessHandler';
 import { ShortenSuccessHandler } from '../wss/handlers/shortenSuccessHandler';
@@ -135,6 +136,7 @@ export class DiscordAccountHelper {
       new DescribeSuccessHandler(this.discordHelper),
       new ShortenSuccessHandler(this.discordHelper),
       new BlendSuccessHandler(this.discordHelper),
+      new VaryRegionSuccessHandler(this.discordHelper), // Handle inpaint/vary region tasks
       new StartAndProgressHandler(this.discordHelper),
       new ImagineSuccessHandler(this.discordHelper),
       new UpscaleSuccessHandler(this.discordHelper),

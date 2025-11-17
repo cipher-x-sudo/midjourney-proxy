@@ -1,7 +1,6 @@
 import { MessageHandler } from './messageHandler';
 import { MessageType } from '../../enums/MessageType';
 import { TaskStatus } from '../../enums/TaskStatus';
-import { TaskAction } from '../../enums/TaskAction';
 import { DiscordInstance } from '../../loadbalancer/discordInstance';
 import { parseContent } from '../../utils/convertUtils';
 import { DiscordHelper } from '../../support/discordHelper';
@@ -27,34 +26,14 @@ export class StartAndProgressHandler extends MessageHandler {
 
     if (messageType === MessageType.CREATE) {
       // Task started
+      // Note: Inpaint/vary region tasks are handled by VaryRegionSuccessHandler (nonce-based)
+      // This handler is for general progress tracking
       
-      // PRIMARY: Try matching by nonce (ONLY for inpaint/modal tasks)
-      // Regular imagine/describe/shorten/blend use their dedicated success handlers
-      // Inpaint tasks are submitted via modal and need nonce matching here
       let task: any = null;
       let matchStrategy: string | null = null;
       
-      if (nonce) {
-        const taskByNonce = instance.getRunningTaskByNonce(nonce);
-        if (taskByNonce) {
-          // Only use nonce matching for inpaint/modal tasks (have empty prompt/promptEn)
-          // Regular tasks should be handled by their dedicated success handlers
-          const isInpaintTask = taskByNonce.action === TaskAction.VARIATION && 
-                                (!taskByNonce.prompt || taskByNonce.prompt === '') && 
-                                (!taskByNonce.promptEn || taskByNonce.promptEn === '');
-          
-          if (isInpaintTask) {
-            task = taskByNonce;
-            matchStrategy = 'nonce';
-            console.log(`[start-handler-${instance.getInstanceId()}] MESSAGE_CREATE: ✓ Matched INPAINT task ${task.id} by nonce: ${nonce}`);
-          } else {
-            console.log(`[start-handler-${instance.getInstanceId()}] MESSAGE_CREATE: Found task by nonce but NOT inpaint (action=${taskByNonce.action}, hasPrompt=${!!taskByNonce.prompt}), skipping nonce match`);
-          }
-        }
-      }
-      
-      // Fallback 1: Try matching by messageId (TASK_PROPERTY_MESSAGE_ID)
-      if (!task && message.id) {
+      // Try matching by messageId (TASK_PROPERTY_MESSAGE_ID)
+      if (message.id) {
         let condition = new TaskCondition()
           .setStatusSet(new Set([TaskStatus.IN_PROGRESS, TaskStatus.SUBMITTED]))
           .setMessageId(message.id);
@@ -103,9 +82,9 @@ export class StartAndProgressHandler extends MessageHandler {
 
       message[MJ_MESSAGE_HANDLED] = true;
       task.setProperty(TASK_PROPERTY_PROGRESS_MESSAGE_ID, message.id);
-      // Update messageId to the new message ID when matched by nonce, interactionMetadataId, or finalPrompt
-      // This is important for modal-submitted/inpaint tasks where the old messageId was cleared
-      if (message.id && (matchStrategy === 'nonce' || matchStrategy === 'interactionMetadataId' || matchStrategy === 'finalPrompt')) {
+      // Update messageId to the new message ID when matched by interactionMetadataId or finalPrompt
+      // This is important for tasks where the old messageId was cleared
+      if (message.id && (matchStrategy === 'interactionMetadataId' || matchStrategy === 'finalPrompt')) {
         task.setProperty(TASK_PROPERTY_MESSAGE_ID, message.id);
       }
       // Handle cases where content might be empty
