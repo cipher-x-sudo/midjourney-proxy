@@ -5,7 +5,7 @@ import { DataUrl, convertBase64Array } from '../utils/convertUtils';
 import { DiscordLoadBalancer } from '../loadbalancer/discordLoadBalancer';
 import { DiscordInstance } from '../loadbalancer/discordInstance';
 import { TaskStoreService } from './store/taskStoreService';
-import { ReturnCode, TASK_PROPERTY_DISCORD_INSTANCE_ID, TASK_PROPERTY_NONCE, TASK_PROPERTY_MESSAGE_ID, TASK_PROPERTY_FLAGS, TASK_PROPERTY_CUSTOM_ID, TASK_PROPERTY_FINAL_PROMPT, TASK_PROPERTY_REMIX_MODAL_MESSAGE_ID, TASK_PROPERTY_INTERACTION_METADATA_ID, TASK_PROPERTY_IFRAME_MODAL_CREATE_CUSTOM_ID } from '../constants';
+import { ReturnCode, TASK_PROPERTY_DISCORD_INSTANCE_ID, TASK_PROPERTY_NONCE, TASK_PROPERTY_MESSAGE_ID, TASK_PROPERTY_FLAGS, TASK_PROPERTY_CUSTOM_ID, TASK_PROPERTY_FINAL_PROMPT, TASK_PROPERTY_REMIX_MODAL_MESSAGE_ID, TASK_PROPERTY_INTERACTION_METADATA_ID, TASK_PROPERTY_IFRAME_MODAL_CREATE_CUSTOM_ID, TASK_PROPERTY_PROGRESS_MESSAGE_ID } from '../constants';
 import { Message } from '../result/Message';
 import { guessFileSuffix } from '../utils/mimeTypeUtils';
 import { TaskStatus } from '../enums/TaskStatus';
@@ -283,6 +283,22 @@ export class TaskServiceImpl implements TaskService {
           task.startTime = Date.now();
           task.progress = '0%';
 
+          // Set finalPrompt so handler can match by it if interactionMetadataId is not available
+          if (prompt) {
+            task.setProperty(TASK_PROPERTY_FINAL_PROMPT, prompt);
+          }
+
+          // Clear progressMessageId so handler can match by interactionMetadataId or finalPrompt instead
+          // The new message from Discord will have a different message ID
+          task.setProperty(TASK_PROPERTY_PROGRESS_MESSAGE_ID, undefined);
+          
+          // Copy interactionMetadataId from modalTask if available (for matching new messages)
+          const modalInteractionMetadataId = modalTask.getProperty(TASK_PROPERTY_INTERACTION_METADATA_ID);
+          if (modalInteractionMetadataId && !task.getProperty(TASK_PROPERTY_INTERACTION_METADATA_ID)) {
+            task.setProperty(TASK_PROPERTY_INTERACTION_METADATA_ID, modalInteractionMetadataId);
+            console.log(`[task-service] submitModal - Copied interactionMetadataId from modalTask: ${modalInteractionMetadataId}`);
+          }
+
           // Save task to store and add to running tasks before returning
           try {
             // Ensure task is stamped with instance id for later correlation
@@ -420,6 +436,22 @@ export class TaskServiceImpl implements TaskService {
       task.startTime = Date.now();
       task.progress = '0%';
 
+      // Set finalPrompt so handler can match by it if interactionMetadataId is not available
+      if (prompt) {
+        task.setProperty(TASK_PROPERTY_FINAL_PROMPT, prompt);
+      }
+
+      // Clear progressMessageId so handler can match by interactionMetadataId or finalPrompt instead
+      // The new message from Discord will have a different message ID
+      task.setProperty(TASK_PROPERTY_PROGRESS_MESSAGE_ID, undefined);
+      
+      // Copy interactionMetadataId from modalTask if available (for matching new messages)
+      const modalInteractionMetadataId = finalTask?.getProperty(TASK_PROPERTY_INTERACTION_METADATA_ID);
+      if (modalInteractionMetadataId && !task.getProperty(TASK_PROPERTY_INTERACTION_METADATA_ID)) {
+        task.setProperty(TASK_PROPERTY_INTERACTION_METADATA_ID, modalInteractionMetadataId);
+        console.log(`[task-service] submitModal - Copied interactionMetadataId from modalTask: ${modalInteractionMetadataId}`);
+      }
+
       // Save task to store and add to running tasks before returning
       try {
         // Ensure task is stamped with instance id for later correlation
@@ -527,6 +559,38 @@ export class TaskServiceImpl implements TaskService {
         ReturnCode.FAILURE,
         `Failed to submit inpaint job: ${inpaintResult.getDescription()}`
       );
+    }
+
+    // Update task status to SUBMITTED so WebSocket handlers can find it
+    task.status = TaskStatus.SUBMITTED;
+    task.startTime = Date.now();
+    task.progress = '0%';
+
+    // Set finalPrompt so handler can match by it if interactionMetadataId is not available
+    if (prompt) {
+      task.setProperty(TASK_PROPERTY_FINAL_PROMPT, prompt);
+    }
+
+    // Clear progressMessageId so handler can match by interactionMetadataId or finalPrompt instead
+    // The new message from Discord will have a different message ID
+    task.setProperty(TASK_PROPERTY_PROGRESS_MESSAGE_ID, undefined);
+
+    // Save task to store and add to running tasks before returning
+    try {
+      // Ensure task is stamped with instance id for later correlation
+      if (!task.getProperty(TASK_PROPERTY_DISCORD_INSTANCE_ID)) {
+        task.setProperty(TASK_PROPERTY_DISCORD_INSTANCE_ID, discordInstance.getInstanceId());
+      }
+      console.log(`[task-service] submitEdits - Saving task ${task.id} to store...`);
+      await this.taskStoreService.save(task);
+      console.log(`[task-service] submitEdits - Successfully saved task ${task.id} to store`);
+      
+      // Add to running tasks so it can be found by fetch endpoint
+      discordInstance.addRunningTask(task);
+      console.log(`[task-service] submitEdits - Added task ${task.id} to running tasks`);
+    } catch (error: any) {
+      console.error(`[task-service] submitEdits - Failed to save task ${task.id} to store:`, error);
+      // Continue with success response even if save fails (task was submitted successfully)
     }
 
     // Return success with task ID
