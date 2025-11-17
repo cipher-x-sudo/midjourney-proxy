@@ -3,6 +3,7 @@ import { DiscordInstance } from '../../loadbalancer/discordInstance';
 import { MessageType } from '../../enums/MessageType';
 import { DiscordHelper } from '../../support/discordHelper';
 import { TaskStatus } from '../../enums/TaskStatus';
+import { TaskStoreService } from '../../services/store/taskStoreService';
 import { 
   TASK_PROPERTY_IFRAME_MODAL_CREATE_CUSTOM_ID,
   TASK_PROPERTY_REMIX_MODAL_MESSAGE_ID,
@@ -16,8 +17,11 @@ import {
  * This handler listens for message updates that contain iframe modal data after clicking vary region button
  */
 export class IframeCustomIdHandler extends MessageHandler {
-  constructor(discordHelper: DiscordHelper) {
+  private taskStoreService: TaskStoreService;
+
+  constructor(discordHelper: DiscordHelper, taskStoreService: TaskStoreService) {
     super(discordHelper);
+    this.taskStoreService = taskStoreService;
   }
 
   /**
@@ -213,9 +217,17 @@ export class IframeCustomIdHandler extends MessageHandler {
 
       if (tasks.length > 0) {
         // Store iframe modal custom ID for all matching tasks
-        tasks.forEach((task) => {
+        tasks.forEach(async (task) => {
           task.setProperty(TASK_PROPERTY_IFRAME_MODAL_CREATE_CUSTOM_ID, customId);
           console.log(`[iframe-handler-${instance.getInstanceId()}] Set iframe_modal_custom_id for task ${task.id}: ${customId.substring(0, 50)}...`);
+          
+          // Save task to store so submitModal can find it
+          try {
+            await this.taskStoreService.save(task);
+            console.log(`[iframe-handler-${instance.getInstanceId()}] Saved task ${task.id} to store with iframe custom_id`);
+          } catch (error: any) {
+            console.error(`[iframe-handler-${instance.getInstanceId()}] Failed to save task ${task.id} with iframe custom_id:`, error);
+          }
         });
       }
       return;

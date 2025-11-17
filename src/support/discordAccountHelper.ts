@@ -130,7 +130,7 @@ export class DiscordAccountHelper {
     return [
       new ErrorMessageHandler(this.discordHelper),
       new CaptchaEmbeddedHandler(this.discordHelper),
-      new IframeCustomIdHandler(this.discordHelper), // Early in chain to catch iframe events quickly
+      new IframeCustomIdHandler(this.discordHelper, this.taskStoreService), // Early in chain to catch iframe events quickly
       new SeedDmHandler(this.discordHelper, this.taskStoreService),
       new DescribeSuccessHandler(this.discordHelper),
       new ShortenSuccessHandler(this.discordHelper),
