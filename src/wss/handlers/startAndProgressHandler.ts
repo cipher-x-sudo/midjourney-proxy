@@ -5,67 +5,38 @@ import { DiscordInstance } from '../../loadbalancer/discordInstance';
 import { parseContent } from '../../utils/convertUtils';
 import { DiscordHelper } from '../../support/discordHelper';
 import { TaskCondition } from '../../support/taskCondition';
+import { TaskStoreService } from '../../services/store/taskStoreService';
 import { TASK_PROPERTY_PROGRESS_MESSAGE_ID, TASK_PROPERTY_FINAL_PROMPT, TASK_PROPERTY_MESSAGE_HASH, MJ_MESSAGE_HANDLED } from '../../constants';
 
 /**
  * Start and progress handler
  */
 export class StartAndProgressHandler extends MessageHandler {
-  constructor(discordHelper: DiscordHelper) {
+  private taskStoreService: TaskStoreService;
+
+  constructor(discordHelper: DiscordHelper, taskStoreService: TaskStoreService) {
     super(discordHelper);
+    this.taskStoreService = taskStoreService;
   }
 
   order(): number {
     return 90;
   }
 
-  handle(instance: DiscordInstance, messageType: MessageType, message: any): void {
+  async handle(instance: DiscordInstance, messageType: MessageType, message: any): Promise<void> {
     const nonce = this.getMessageNonce(message);
     const content = this.getMessageContent(message);
     const parseData = parseContent(content);
 
     console.log(`[Tracker] Handler called: type=${messageType}, nonce=${nonce || 'none'}, hasParseData=${!!parseData}, messageId=${message.id}`);
 
-    if (messageType === MessageType.CREATE) {
-      // Task started - try multiple matching strategies
-      let task: any = null;
-      let matchStrategy: string | null = null;
-
-      // Strategy 1: Match by nonce (primary, most reliable)
-      if (nonce) {
-        task = instance.getRunningTaskByNonce(nonce);
-        if (task) {
-          matchStrategy = 'nonce';
-          console.log(`[Tracker] MESSAGE_CREATE: Matched task ${task.id} by nonce=${nonce}`);
-        } else {
-          console.log(`[Tracker] MESSAGE_CREATE: No task found with nonce=${nonce}`);
-        }
-      } else {
-        console.log(`[Tracker] MESSAGE_CREATE: No nonce provided, trying fallback strategies`);
-      }
-
-      // Strategy 2: Match by prompt (fallback when no nonce)
-      if (!task && parseData?.prompt) {
-        const condition = new TaskCondition()
-          .setStatusSet(new Set([TaskStatus.IN_PROGRESS, TaskStatus.SUBMITTED]))
-          .setFinalPrompt(parseData.prompt);
-        const tasks = instance.findRunningTask(condition.toFunction());
-        // Find task without progressMessageId (hasn't been started yet)
-        task = tasks.find(t => !t.getProperty(TASK_PROPERTY_PROGRESS_MESSAGE_ID)) || null;
-        if (task) {
-          matchStrategy = 'prompt';
-          console.log(`[Tracker] MESSAGE_CREATE: Matched task ${task.id} by prompt="${parseData.prompt?.substring(0, 30)}..."`);
-        } else {
-          console.log(`[Tracker] MESSAGE_CREATE: No task found with prompt="${parseData.prompt?.substring(0, 30)}..." and no progressMessageId`);
-        }
-      }
-
+    if (messageType === MessageType.CREATE && nonce) {
+      // Task started
+      const task = instance.getRunningTaskByNonce(nonce);
+      console.log(`[Tracker] MESSAGE_CREATE: Found task=${!!task}, taskId=${task?.id || 'none'}, nonce=${nonce}`);
       if (!task) {
-        console.log(`[Tracker] MESSAGE_CREATE: No task matched. nonce=${nonce || 'none'}, prompt=${parseData?.prompt?.substring(0, 30) || 'none'}`);
         return;
       }
-
-      console.log(`[Tracker] MESSAGE_CREATE: ✓ Task ${task.id} matched using strategy: ${matchStrategy}`);
       message[MJ_MESSAGE_HANDLED] = true;
       task.setProperty(TASK_PROPERTY_PROGRESS_MESSAGE_ID, message.id);
       console.log(`[Tracker] MESSAGE_CREATE: Set progressMessageId=${message.id} for task ${task.id}`);
@@ -88,19 +59,48 @@ export class StartAndProgressHandler extends MessageHandler {
         .setStatusSet(new Set([TaskStatus.IN_PROGRESS, TaskStatus.SUBMITTED]))
         .setProgressMessageId(message.id);
 
-      const task = instance.findRunningTask(condition.toFunction()).find(t => t) || null;
-      console.log(`[Tracker] MESSAGE_UPDATE: Found task=${!!task}, taskId=${task?.id || 'none'}, storedProgressMessageId=${task?.getProperty(TASK_PROPERTY_PROGRESS_MESSAGE_ID) || 'none'}`);
+      let task = instance.findRunningTask(condition.toFunction()).find(t => t) || null;
+      let taskSource = 'runningTasks';
       
+      console.log(`[Tracker] MESSAGE_UPDATE: Found task in runningTasks=${!!task}, taskId=${task?.id || 'none'}, storedProgressMessageId=${task?.getProperty(TASK_PROPERTY_PROGRESS_MESSAGE_ID) || 'none'}`);
+      
+      // Redis fallback: Check if task exists in Redis but not in runningTasks
       if (!task) {
-        console.log(`[Tracker] MESSAGE_UPDATE: No task found with progressMessageId=${message.id}, skipping update`);
-        return;
+        console.log(`[Tracker] MESSAGE_UPDATE: Task not in runningTasks, checking Redis fallback for progressMessageId=${message.id}`);
+        
+        try {
+          // Search Redis for task with matching progressMessageId
+          const redisTask = await this.taskStoreService.findOne((t: any) => {
+            const progressMessageId = t.getProperty(TASK_PROPERTY_PROGRESS_MESSAGE_ID);
+            const status = t.status;
+            const matchesProgressMessageId = progressMessageId === message.id;
+            const matchesStatus = status === TaskStatus.IN_PROGRESS || status === TaskStatus.SUBMITTED;
+            
+            return matchesProgressMessageId && matchesStatus;
+          });
+          
+          if (redisTask) {
+            task = redisTask;
+            taskSource = 'redis';
+            console.log(`[Tracker] MESSAGE_UPDATE: ✓ Found task in Redis! taskId=${task.id}, progressMessageId=${message.id}`);
+          } else {
+            console.log(`[Tracker] MESSAGE_UPDATE: Task not found in Redis either for progressMessageId=${message.id}`);
+          }
+        } catch (error: any) {
+          console.error(`[Tracker] MESSAGE_UPDATE: Error checking Redis fallback:`, error);
+        }
+        
+        if (!task) {
+          console.log(`[Tracker] MESSAGE_UPDATE: No task found with progressMessageId=${message.id}, skipping update`);
+          return;
+        }
       }
 
       message[MJ_MESSAGE_HANDLED] = true;
       task.setProperty(TASK_PROPERTY_FINAL_PROMPT, parseData.prompt);
       task.status = TaskStatus.IN_PROGRESS;
       task.progress = parseData.status;
-      console.log(`[Tracker] MESSAGE_UPDATE: Updated task ${task.id} progress to ${parseData.status}`);
+      console.log(`[Tracker] MESSAGE_UPDATE: Updated task ${task.id} progress to ${parseData.status} (source: ${taskSource})`);
       
       const imageUrl = this.getImageUrl(message);
       if (imageUrl) {
@@ -110,6 +110,16 @@ export class StartAndProgressHandler extends MessageHandler {
           task.setProperty(TASK_PROPERTY_MESSAGE_HASH, messageHash);
         }
         console.log(`[Tracker] MESSAGE_UPDATE: Set imageUrl and messageHash for task ${task.id}`);
+      }
+      
+      // If task came from Redis, save it back to Redis
+      if (taskSource === 'redis') {
+        try {
+          await this.taskStoreService.save(task);
+          console.log(`[Tracker] MESSAGE_UPDATE: ✓ Saved updated task ${task.id} back to Redis`);
+        } catch (error: any) {
+          console.error(`[Tracker] MESSAGE_UPDATE: Failed to save task ${task.id} to Redis:`, error);
+        }
       }
     } else {
       console.log(`[Tracker] Handler did nothing: type=${messageType}, nonce=${nonce || 'none'}, hasParseData=${!!parseData}`);
