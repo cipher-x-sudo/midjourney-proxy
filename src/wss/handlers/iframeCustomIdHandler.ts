@@ -243,7 +243,7 @@ export class IframeCustomIdHandler extends MessageHandler {
           
           // Save to Redis immediately so submitModal can retrieve the latest interactionMetadataId
           // This is critical for inpaint task matching
-          this.taskStoreService.save(task).catch((error: any) => {
+          Promise.resolve(this.taskStoreService.save(task)).catch((error: any) => {
             console.error(`[iframe-handler-${instance.getInstanceId()}] Failed to save task ${task.id} with interactionMetadataId:`, error);
           });
         }
