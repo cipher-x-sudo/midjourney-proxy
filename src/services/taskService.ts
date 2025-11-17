@@ -278,6 +278,11 @@ export class TaskServiceImpl implements TaskService {
             );
           }
 
+          // Update task status to SUBMITTED so WebSocket handlers can find it
+          task.status = TaskStatus.SUBMITTED;
+          task.startTime = Date.now();
+          task.progress = '0%';
+
           // Save task to store and add to running tasks before returning
           try {
             // Ensure task is stamped with instance id for later correlation
@@ -409,6 +414,11 @@ export class TaskServiceImpl implements TaskService {
           `Failed to submit inpaint job: ${inpaintResult.getDescription()}`
         );
       }
+
+      // Update task status to SUBMITTED so WebSocket handlers can find it
+      task.status = TaskStatus.SUBMITTED;
+      task.startTime = Date.now();
+      task.progress = '0%';
 
       // Save task to store and add to running tasks before returning
       try {
