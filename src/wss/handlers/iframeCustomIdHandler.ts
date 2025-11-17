@@ -211,11 +211,13 @@ export class IframeCustomIdHandler extends MessageHandler {
     if (eventTypeStr === 'INTERACTION_SUCCESS') {
       const interactionId = message.id || message.interaction?.id;
       if (!interactionId) {
+        console.warn(`[iframe-handler-${instance.getInstanceId()}] INTERACTION_SUCCESS event missing interactionId`);
         return;
       }
 
       // Find tasks that are waiting for modal data (MODAL status or inpaint actions)
       const messageId = message.message?.id || message.message_id || message.data?.message_id;
+      console.log(`[iframe-handler-${instance.getInstanceId()}] INTERACTION_SUCCESS: interactionId=${interactionId}, messageId=${messageId || 'none'}`);
       const tasks = instance.findRunningTask((task) => {
         // Find tasks with MODAL status or with customId starting with MJ::Inpaint::
         if (task.status === TaskStatus.MODAL) {
@@ -233,11 +235,20 @@ export class IframeCustomIdHandler extends MessageHandler {
 
       if (tasks.length > 0) {
         // Set interactionMetadataId and remixModalMessageId for all matching tasks
-        tasks.forEach((task) => {
+        console.log(`[iframe-handler-${instance.getInstanceId()}] INTERACTION_SUCCESS: Found ${tasks.length} matching task(s)`);
+        for (const task of tasks) {
           task.setProperty(TASK_PROPERTY_INTERACTION_METADATA_ID, interactionId);
           task.setProperty(TASK_PROPERTY_REMIX_MODAL_MESSAGE_ID, interactionId);
-          console.log(`[iframe-handler-${instance.getInstanceId()}] Set remixModalMessageId and interactionMetadataId for task ${task.id}: ${interactionId}`);
-        });
+          console.log(`[iframe-handler-${instance.getInstanceId()}] ✓ Set interactionMetadataId for task ${task.id}: ${interactionId}`);
+          
+          // Save to Redis immediately so submitModal can retrieve the latest interactionMetadataId
+          // This is critical for inpaint task matching
+          this.taskStoreService.save(task).catch((error: any) => {
+            console.error(`[iframe-handler-${instance.getInstanceId()}] Failed to save task ${task.id} with interactionMetadataId:`, error);
+          });
+        }
+      } else {
+        console.warn(`[iframe-handler-${instance.getInstanceId()}] INTERACTION_SUCCESS: No matching tasks found for messageId=${messageId || 'none'}`);
       }
       return;
     }

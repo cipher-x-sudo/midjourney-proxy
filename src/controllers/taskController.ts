@@ -29,6 +29,16 @@ export class TaskController {
       return queueTask;
     }
 
+    // Check running tasks from all instances (important for inpaint/modal tasks)
+    const instances = this.discordLoadBalancer.getAllInstances();
+    for (const instance of instances) {
+      const runningTasks = instance.getRunningTasks();
+      const runningTask = runningTasks.find(t => t.id === id);
+      if (runningTask) {
+        return runningTask;
+      }
+    }
+
     // Then check stored tasks
     const task = await this.taskStoreService.get(id);
     return task || null;

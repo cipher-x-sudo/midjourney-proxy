@@ -296,9 +296,13 @@ export class TaskServiceImpl implements TaskService {
           
           // Copy interactionMetadataId from modalTask if available (for matching new messages)
           const modalInteractionMetadataId = modalTask.getProperty(TASK_PROPERTY_INTERACTION_METADATA_ID);
-          if (modalInteractionMetadataId && !task.getProperty(TASK_PROPERTY_INTERACTION_METADATA_ID)) {
+          const currentInteractionMetadataId = task.getProperty(TASK_PROPERTY_INTERACTION_METADATA_ID);
+          console.log(`[task-service] submitModal - InteractionMetadataId status: modalTask=${modalInteractionMetadataId || 'none'}, newTask=${currentInteractionMetadataId || 'none'}`);
+          if (modalInteractionMetadataId && !currentInteractionMetadataId) {
             task.setProperty(TASK_PROPERTY_INTERACTION_METADATA_ID, modalInteractionMetadataId);
-            console.log(`[task-service] submitModal - Copied interactionMetadataId from modalTask: ${modalInteractionMetadataId}`);
+            console.log(`[task-service] submitModal - ✓ Copied interactionMetadataId from modalTask ${modalTaskId} to new task ${task.id}: ${modalInteractionMetadataId}`);
+          } else if (!modalInteractionMetadataId) {
+            console.warn(`[task-service] submitModal - ⚠ WARNING: modalTask ${modalTaskId} has no interactionMetadataId! This may cause message matching issues.`);
           }
 
           // Save task to store and add to running tasks before returning
@@ -451,9 +455,13 @@ export class TaskServiceImpl implements TaskService {
       
       // Copy interactionMetadataId from modalTask if available (for matching new messages)
       const modalInteractionMetadataId = finalTask?.getProperty(TASK_PROPERTY_INTERACTION_METADATA_ID);
-      if (modalInteractionMetadataId && !task.getProperty(TASK_PROPERTY_INTERACTION_METADATA_ID)) {
+      const currentInteractionMetadataId = task.getProperty(TASK_PROPERTY_INTERACTION_METADATA_ID);
+      console.log(`[task-service] submitModal - InteractionMetadataId status: modalTask=${modalInteractionMetadataId || 'none'}, newTask=${currentInteractionMetadataId || 'none'}`);
+      if (modalInteractionMetadataId && !currentInteractionMetadataId) {
         task.setProperty(TASK_PROPERTY_INTERACTION_METADATA_ID, modalInteractionMetadataId);
-        console.log(`[task-service] submitModal - Copied interactionMetadataId from modalTask: ${modalInteractionMetadataId}`);
+        console.log(`[task-service] submitModal - ✓ Copied interactionMetadataId from modalTask ${modalTaskId} to new task ${task.id}: ${modalInteractionMetadataId}`);
+      } else if (!modalInteractionMetadataId) {
+        console.warn(`[task-service] submitModal - ⚠ WARNING: modalTask ${modalTaskId} has no interactionMetadataId! This may cause message matching issues.`);
       }
 
       // Save task to store and add to running tasks before returning

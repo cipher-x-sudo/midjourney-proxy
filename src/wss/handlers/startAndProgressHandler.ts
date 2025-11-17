@@ -34,6 +34,7 @@ export class StartAndProgressHandler extends MessageHandler {
         .setMessageId(message.id);
       
       let task = instance.findRunningTask(condition.toFunction()).find(t => t) || null;
+      let matchStrategy = task ? 'messageId' : null;
 
       // Fallback 2: Try matching by interactionMetadataId
       let matchedByInteractionMetadataId = false;
@@ -49,6 +50,7 @@ export class StartAndProgressHandler extends MessageHandler {
         task = tasks.find(t => t) || null;
         if (task) {
           matchedByInteractionMetadataId = true;
+          matchStrategy = 'interactionMetadataId';
         }
       }
 
@@ -63,12 +65,16 @@ export class StartAndProgressHandler extends MessageHandler {
         task = tasks.sort((a, b) => (a.startTime || 0) - (b.startTime || 0))[0] || null;
         if (task) {
           matchedByFinalPrompt = true;
+          matchStrategy = 'finalPrompt';
         }
       }
 
       if (!task) {
+        console.log(`[start-handler-${instance.getInstanceId()}] MESSAGE_CREATE: No task matched. messageId=${message.id}, interactionMetadataId=${message.interactionMetadata?.id || 'none'}, prompt=${parseData?.prompt?.substring(0, 30) || 'none'}`);
         return;
       }
+      
+      console.log(`[start-handler-${instance.getInstanceId()}] MESSAGE_CREATE: ✓ Matched task ${task.id} using strategy: ${matchStrategy}`);
 
       message[MJ_MESSAGE_HANDLED] = true;
       task.setProperty(TASK_PROPERTY_PROGRESS_MESSAGE_ID, message.id);
@@ -94,6 +100,7 @@ export class StartAndProgressHandler extends MessageHandler {
         .setProgressMessageId(message.id);
 
       let task = instance.findRunningTask(condition.toFunction()).find(t => t) || null;
+      let matchStrategy = task ? 'progressMessageId' : null;
 
       // Fallback 1: Try matching by messageId (TASK_PROPERTY_MESSAGE_ID)
       if (!task && message.id) {
@@ -101,6 +108,9 @@ export class StartAndProgressHandler extends MessageHandler {
           .setStatusSet(new Set([TaskStatus.IN_PROGRESS, TaskStatus.SUBMITTED]))
           .setMessageId(message.id);
         task = instance.findRunningTask(condition.toFunction()).find(t => t) || null;
+        if (task) {
+          matchStrategy = 'messageId';
+        }
       }
 
       // Fallback 2: Try matching by interactionMetadataId
@@ -117,6 +127,7 @@ export class StartAndProgressHandler extends MessageHandler {
         task = tasks.find(t => t) || null;
         if (task) {
           matchedByInteractionMetadataId = true;
+          matchStrategy = 'interactionMetadataId';
         }
       }
 
@@ -131,12 +142,16 @@ export class StartAndProgressHandler extends MessageHandler {
         task = tasks.sort((a, b) => (a.startTime || 0) - (b.startTime || 0))[0] || null;
         if (task) {
           matchedByFinalPrompt = true;
+          matchStrategy = 'finalPrompt';
         }
       }
 
       if (!task) {
+        console.log(`[progress-handler-${instance.getInstanceId()}] MESSAGE_UPDATE: No task matched. messageId=${message.id}, interactionMetadataId=${message.interactionMetadata?.id || 'none'}, prompt=${parseData.prompt?.substring(0, 30) || 'none'}, progress=${parseData.status}`);
         return;
       }
+      
+      console.log(`[progress-handler-${instance.getInstanceId()}] MESSAGE_UPDATE: ✓ Matched task ${task.id} using strategy: ${matchStrategy}, progress: ${parseData.status}`);
 
       message[MJ_MESSAGE_HANDLED] = true;
       task.setProperty(TASK_PROPERTY_FINAL_PROMPT, parseData.prompt);

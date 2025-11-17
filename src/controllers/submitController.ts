@@ -320,6 +320,21 @@ export class SubmitController {
       }
     }
     
+    // Refresh targetTask from Redis to ensure we have the latest properties
+    // (interactionMetadataId might have been set by INTERACTION_SUCCESS event handler)
+    if (targetTask) {
+      console.log(`[modal-controller] Refreshing task ${modalDTO.taskId} from Redis to get latest properties...`);
+      const freshTask = await this.taskStoreService.get(targetTask.id!);
+      if (freshTask) {
+        const oldInteractionMetadataId = targetTask.getProperty('interactionMetadataId');
+        const newInteractionMetadataId = freshTask.getProperty('interactionMetadataId');
+        if (oldInteractionMetadataId !== newInteractionMetadataId) {
+          console.log(`[modal-controller] Task ${modalDTO.taskId} interactionMetadataId updated: ${oldInteractionMetadataId || 'none'} -> ${newInteractionMetadataId || 'none'}`);
+        }
+        targetTask = freshTask;
+      }
+    }
+    
     if (!targetTask) {
       return SubmitResultVO.fail(ReturnCode.NOT_FOUND, 'related task does not exist or has expired');
     }
