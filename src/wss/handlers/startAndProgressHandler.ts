@@ -1,6 +1,7 @@
 import { MessageHandler } from './messageHandler';
 import { MessageType } from '../../enums/MessageType';
 import { TaskStatus } from '../../enums/TaskStatus';
+import { TaskAction } from '../../enums/TaskAction';
 import { DiscordInstance } from '../../loadbalancer/discordInstance';
 import { parseContent } from '../../utils/convertUtils';
 import { DiscordHelper } from '../../support/discordHelper';
@@ -27,16 +28,28 @@ export class StartAndProgressHandler extends MessageHandler {
     if (messageType === MessageType.CREATE) {
       // Task started
       
-      // PRIMARY: Try matching by nonce (just like imagine/describe/shorten/blend)
-      // This is critical for inpaint tasks that are submitted like new jobs
+      // PRIMARY: Try matching by nonce (ONLY for inpaint/modal tasks)
+      // Regular imagine/describe/shorten/blend use their dedicated success handlers
+      // Inpaint tasks are submitted via modal and need nonce matching here
       let task: any = null;
       let matchStrategy: string | null = null;
       
       if (nonce) {
-        task = instance.getRunningTaskByNonce(nonce);
-        if (task) {
-          matchStrategy = 'nonce';
-          console.log(`[start-handler-${instance.getInstanceId()}] MESSAGE_CREATE: ✓ Matched task ${task.id} by nonce: ${nonce}`);
+        const taskByNonce = instance.getRunningTaskByNonce(nonce);
+        if (taskByNonce) {
+          // Only use nonce matching for inpaint/modal tasks (have empty prompt/promptEn)
+          // Regular tasks should be handled by their dedicated success handlers
+          const isInpaintTask = taskByNonce.action === TaskAction.VARIATION && 
+                                (!taskByNonce.prompt || taskByNonce.prompt === '') && 
+                                (!taskByNonce.promptEn || taskByNonce.promptEn === '');
+          
+          if (isInpaintTask) {
+            task = taskByNonce;
+            matchStrategy = 'nonce';
+            console.log(`[start-handler-${instance.getInstanceId()}] MESSAGE_CREATE: ✓ Matched INPAINT task ${task.id} by nonce: ${nonce}`);
+          } else {
+            console.log(`[start-handler-${instance.getInstanceId()}] MESSAGE_CREATE: Found task by nonce but NOT inpaint (action=${taskByNonce.action}, hasPrompt=${!!taskByNonce.prompt}), skipping nonce match`);
+          }
         }
       }
       
