@@ -285,59 +285,114 @@ export class TaskServiceImpl implements TaskService {
       // If iframe custom_id not found, click button and wait for it (fallback for edge cases)
       console.log(`[task-service] submitModal - No existing iframe custom ID found, clicking button and waiting for WebSocket events`);
       
-      // Step 1: Click the button programmatically via Discord API (returns 204 No Content)
+      // Ensure task is in runningTasks before clicking button (for handler to find it)
+      if (!modalTask) {
+        modalTask = await this.taskStoreService.get(modalTaskId);
+        if (modalTask) {
+          console.log(`[task-service] submitModal - Adding task ${modalTaskId} to runningTasks before button click`);
+          discordInstance.addRunningTask(modalTask);
+        }
+      }
+      
+      if (!modalTask) {
+        console.error(`[task-service] submitModal - Task ${modalTaskId} not found in runningTasks or Redis`);
+        return SubmitResultVO.fail(ReturnCode.NOT_FOUND, 'Task not found');
+      }
+
+      // Step 1: Register listener BEFORE clicking button (primary approach)
+      const maxWaitTime = 30000; // 30 seconds in milliseconds
+      const pollInterval = 1000; // 1 second
+      
+      console.log(`[task-service] submitModal - Registering waitForIframeCustomId listener for message ${messageId} (timeout: ${maxWaitTime}ms)`);
+      const listenerPromise = discordInstance.waitForIframeCustomId(messageId, maxWaitTime)
+        .then((iframeData) => {
+          console.log(`[task-service] submitModal - Received iframe data via WebSocket listener: custom_id=${iframeData.custom_id.substring(0, 50)}...`);
+          return iframeData;
+        })
+        .catch((error) => {
+          console.warn(`[task-service] submitModal - WebSocket listener failed: ${error.message}`);
+          throw error;
+        });
+
+      // Step 2: Click the button programmatically via Discord API (returns 204 No Content)
       const actionMessage = await discordInstance.customAction(messageId, messageFlags, customId, nonce);
       if (actionMessage.getCode() !== ReturnCode.SUCCESS) {
+        // Cancel listener if button click failed
+        const pending = (discordInstance as any).pendingIframeExtractions?.get(messageId);
+        if (pending) {
+          clearTimeout(pending.timeout);
+          (discordInstance as any).pendingIframeExtractions.delete(messageId);
+        }
         return SubmitResultVO.fail(actionMessage.getCode(), actionMessage.getDescription());
       }
 
-      // Step 2: Wait for iframe custom ID (polling every 1s, max 30 seconds for timeout)
-      const maxWaitTime = 30000; // 30 seconds in milliseconds (reduced from 5 minutes)
-      const pollInterval = 1000; // 1 second (reduced from 2.5 seconds)
+      // Step 3: Polling fallback (runs in parallel with listener)
       const startTime = Date.now();
-
-      while (true) {
-        // Get fresh task state
-        let taskToCheck = discordInstance.getRunningTask(modalTaskId);
-        if (!taskToCheck) {
-          taskToCheck = await this.taskStoreService.get(modalTaskId);
+      const pollingPromise = new Promise<{ custom_id: string }>((resolve, reject) => {
+        const poll = async () => {
+          // Get fresh task state
+          let taskToCheck = discordInstance.getRunningTask(modalTaskId);
           if (!taskToCheck) {
-            console.error(`[task-service] submitModal - Task ${modalTaskId} not found in runningTasks or Redis`);
-            return SubmitResultVO.fail(ReturnCode.NOT_FOUND, 'Task not found');
+            taskToCheck = await this.taskStoreService.get(modalTaskId);
+            if (!taskToCheck) {
+              reject(new Error('Task not found'));
+              return;
+            }
           }
-        }
-        
-        // Check if iframe custom ID is now available
-        const iframeCustomId = taskToCheck.getProperty(TASK_PROPERTY_IFRAME_MODAL_CREATE_CUSTOM_ID);
-        if (iframeCustomId) {
-          console.log(`[task-service] submitModal - Found iframe custom ID for task ${modalTaskId}, proceeding with inpaint submission`);
           
-          // Wait additional 1.2 seconds as per C# implementation
-          await this.sleep(1200);
-          
-          // Call submitInpaint with iframe custom ID
-          const maskBase64 = payload.maskBase64 || '';
-          const prompt = payload.prompt || taskToCheck.promptEn || taskToCheck.prompt || '';
-          
-          const inpaintResult = await discordInstance.submitInpaint(iframeCustomId, maskBase64, prompt);
-          if (inpaintResult.getCode() !== ReturnCode.SUCCESS) {
-            return SubmitResultVO.fail(
-              ReturnCode.FAILURE,
-              `Failed to submit inpaint job: ${inpaintResult.getDescription()}`
-            );
+          // Check if iframe custom ID is now available
+          const iframeCustomId = taskToCheck.getProperty(TASK_PROPERTY_IFRAME_MODAL_CREATE_CUSTOM_ID);
+          if (iframeCustomId) {
+            console.log(`[task-service] submitModal - Found iframe custom ID via polling for task ${modalTaskId}`);
+            resolve({ custom_id: iframeCustomId });
+            return;
           }
 
-          return SubmitResultVO.of(ReturnCode.SUCCESS, 'Success', task.id!);
-        }
+          // Check timeout
+          if (Date.now() - startTime > maxWaitTime) {
+            reject(new Error('Timeout: iframe custom ID not found within 30 seconds'));
+            return;
+          }
 
-        // Check timeout
-        if (Date.now() - startTime > maxWaitTime) {
-          return SubmitResultVO.fail(ReturnCode.NOT_FOUND, 'Timeout: iframe custom ID not found within 30 seconds');
-        }
+          // Wait before next poll
+          await this.sleep(pollInterval);
+          poll();
+        };
+        poll();
+      });
 
-        // Wait before next poll
-        await this.sleep(pollInterval);
+      // Step 4: Use Promise.race to get result from either listener or polling (whichever completes first)
+      let iframeData: { custom_id: string };
+      try {
+        iframeData = await Promise.race([listenerPromise, pollingPromise]);
+        console.log(`[task-service] submitModal - Successfully obtained iframe custom ID for task ${modalTaskId}`);
+      } catch (error: any) {
+        // Cancel the other promise if one failed
+        const pending = (discordInstance as any).pendingIframeExtractions?.get(messageId);
+        if (pending) {
+          clearTimeout(pending.timeout);
+          (discordInstance as any).pendingIframeExtractions.delete(messageId);
+        }
+        return SubmitResultVO.fail(ReturnCode.NOT_FOUND, error.message || 'Timeout: iframe custom ID not found within 30 seconds');
       }
+
+      // Step 5: Wait additional 1.2 seconds as per C# implementation
+      await this.sleep(1200);
+      
+      // Step 6: Call submitInpaint with iframe custom ID
+      const maskBase64 = payload.maskBase64 || '';
+      const finalTask = discordInstance.getRunningTask(modalTaskId) || await this.taskStoreService.get(modalTaskId);
+      const prompt = payload.prompt || (finalTask?.promptEn) || (finalTask?.prompt) || '';
+      
+      const inpaintResult = await discordInstance.submitInpaint(iframeData.custom_id, maskBase64, prompt);
+      if (inpaintResult.getCode() !== ReturnCode.SUCCESS) {
+        return SubmitResultVO.fail(
+          ReturnCode.FAILURE,
+          `Failed to submit inpaint job: ${inpaintResult.getDescription()}`
+        );
+      }
+
+      return SubmitResultVO.of(ReturnCode.SUCCESS, 'Success', task.id!);
     }
 
     // For non-inpaint actions, use the original modal submit flow

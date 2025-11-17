@@ -10,6 +10,7 @@ import {
   TASK_PROPERTY_INTERACTION_METADATA_ID,
   TASK_PROPERTY_MESSAGE_ID,
   TASK_PROPERTY_CUSTOM_ID,
+  TASK_PROPERTY_NONCE,
 } from '../../constants';
 
 /**
@@ -142,6 +143,7 @@ export class IframeCustomIdHandler extends MessageHandler {
         // The interaction should have a message_id (the original message where button was clicked)
         const messageId = message.message?.id || message.message_id || message.data?.message_id;
         
+        // Notify pending listeners (for waitForIframeCustomId)
         if (messageId && instance.notifyIframeCustomId) {
           console.log(`[iframe-notify-${instance.getInstanceId()}] Notifying pending listener for message ${messageId} with iframe data`);
           instance.notifyIframeCustomId(messageId, iframeData);
@@ -149,6 +151,55 @@ export class IframeCustomIdHandler extends MessageHandler {
           // If no message_id, try to notify all pending listeners (fallback)
           console.warn(`[iframe-notify-${instance.getInstanceId()}] Found iframe data in ${eventTypeStr} but no message_id to match. Custom_id: ${iframeData.custom_id.substring(0, 50)}...`);
           console.warn(`[iframe-notify-${instance.getInstanceId()}] Interaction structure - message: ${message.message?.id}, message_id: ${message.message_id}, data.message_id: ${message.data?.message_id}`);
+        }
+        
+        // For INTERACTION_IFRAME_MODAL_CREATE, also save to task properties (for polling fallback)
+        if (eventTypeStr === 'INTERACTION_IFRAME_MODAL_CREATE') {
+          const nonce = message.nonce || message.data?.nonce;
+          let tasks: any[] = [];
+          
+          // Strategy 1: Match by messageId (primary)
+          if (messageId) {
+            tasks = instance.findRunningTask((task) => {
+              if (task.status === TaskStatus.MODAL) {
+                const storedMessageId = task.getProperty(TASK_PROPERTY_MESSAGE_ID);
+                return storedMessageId === messageId;
+              }
+              const taskCustomId = task.getProperty(TASK_PROPERTY_CUSTOM_ID);
+              if (taskCustomId && taskCustomId.startsWith('MJ::Inpaint::')) {
+                const storedMessageId = task.getProperty(TASK_PROPERTY_MESSAGE_ID);
+                return storedMessageId === messageId;
+              }
+              return false;
+            });
+          }
+          
+          // Strategy 2: Match by nonce (fallback, like C# implementation)
+          if (tasks.length === 0 && nonce) {
+            const taskByNonce = instance.getRunningTaskByNonce(nonce);
+            if (taskByNonce) {
+              const taskCustomId = taskByNonce.getProperty(TASK_PROPERTY_CUSTOM_ID);
+              if (taskCustomId && taskCustomId.startsWith('MJ::Inpaint::')) {
+                tasks = [taskByNonce];
+                console.log(`[iframe-handler-${instance.getInstanceId()}] Matched task ${taskByNonce.id} by nonce ${nonce} (fallback from messageId matching)`);
+              }
+            }
+          }
+
+          if (tasks.length > 0) {
+            // Store iframe modal custom ID for all matching tasks and save to store
+            for (const task of tasks) {
+              task.setProperty(TASK_PROPERTY_IFRAME_MODAL_CREATE_CUSTOM_ID, iframeData.custom_id);
+              console.log(`[iframe-handler-${instance.getInstanceId()}] Set iframe_modal_custom_id for task ${task.id}: ${iframeData.custom_id.substring(0, 50)}...`);
+              
+              // Save task to store so submitModal can find it (fire-and-forget to avoid blocking handler)
+              this.saveTaskWithIframeCustomId(instance.getInstanceId(), task).catch((error: any) => {
+                console.error(`[iframe-handler-${instance.getInstanceId()}] Failed to save task ${task.id} with iframe custom_id:`, error);
+              });
+            }
+          } else {
+            console.warn(`[iframe-handler-${instance.getInstanceId()}] Found iframe custom_id ${iframeData.custom_id.substring(0, 50)}... but could not match task by messageId (${messageId}) or nonce (${nonce})`);
+          }
         }
       } else {
         console.debug(`[iframe-result-${instance.getInstanceId()}] Checked ${eventTypeStr} event - no iframe data found`);
@@ -191,44 +242,6 @@ export class IframeCustomIdHandler extends MessageHandler {
       return;
     }
 
-    // Handle INTERACTION_IFRAME_MODAL_CREATE events (iframe modal creation)
-    if (eventTypeStr === 'INTERACTION_IFRAME_MODAL_CREATE') {
-      // Extract custom_id from the event data
-      const customId = message.data?.custom_id || message.custom_id;
-      if (!customId || typeof customId !== 'string') {
-        return;
-      }
-
-      // Find tasks that are waiting for iframe modal custom ID
-      const messageId = message.message?.id || message.message_id || message.data?.message_id;
-      const tasks = instance.findRunningTask((task) => {
-        // Find tasks with MODAL status or with customId starting with MJ::Inpaint::
-        if (task.status === TaskStatus.MODAL) {
-          const storedMessageId = task.getProperty(TASK_PROPERTY_MESSAGE_ID);
-          return storedMessageId === messageId;
-        }
-        const taskCustomId = task.getProperty(TASK_PROPERTY_CUSTOM_ID);
-        if (taskCustomId && taskCustomId.startsWith('MJ::Inpaint::')) {
-          const storedMessageId = task.getProperty(TASK_PROPERTY_MESSAGE_ID);
-          return storedMessageId === messageId;
-        }
-        return false;
-      });
-
-      if (tasks.length > 0) {
-        // Store iframe modal custom ID for all matching tasks and save to store
-        for (const task of tasks) {
-          task.setProperty(TASK_PROPERTY_IFRAME_MODAL_CREATE_CUSTOM_ID, customId);
-          console.log(`[iframe-handler-${instance.getInstanceId()}] Set iframe_modal_custom_id for task ${task.id}: ${customId.substring(0, 50)}...`);
-          
-          // Save task to store so submitModal can find it (fire-and-forget to avoid blocking handler)
-          this.saveTaskWithIframeCustomId(instance.getInstanceId(), task).catch((error: any) => {
-            console.error(`[iframe-handler-${instance.getInstanceId()}] Failed to save task ${task.id} with iframe custom_id:`, error);
-          });
-        }
-      }
-      return;
-    }
 
     // Handle INTERACTION_CREATE events (button clicks)
     if (eventTypeStr === 'INTERACTION_CREATE') {
