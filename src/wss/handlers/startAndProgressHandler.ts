@@ -5,7 +5,7 @@ import { DiscordInstance } from '../../loadbalancer/discordInstance';
 import { parseContent } from '../../utils/convertUtils';
 import { DiscordHelper } from '../../support/discordHelper';
 import { TaskCondition } from '../../support/taskCondition';
-import { TASK_PROPERTY_PROGRESS_MESSAGE_ID, TASK_PROPERTY_FINAL_PROMPT, TASK_PROPERTY_MESSAGE_HASH, MJ_MESSAGE_HANDLED } from '../../constants';
+import { TASK_PROPERTY_PROGRESS_MESSAGE_ID, TASK_PROPERTY_FINAL_PROMPT, TASK_PROPERTY_MESSAGE_HASH, TASK_PROPERTY_MESSAGE_ID, TASK_PROPERTY_INTERACTION_METADATA_ID, MJ_MESSAGE_HANDLED } from '../../constants';
 
 /**
  * Start and progress handler
@@ -43,11 +43,44 @@ export class StartAndProgressHandler extends MessageHandler {
         return;
       }
 
-      const condition = new TaskCondition()
+      // Primary match: Try matching by progressMessageId
+      let condition = new TaskCondition()
         .setStatusSet(new Set([TaskStatus.IN_PROGRESS, TaskStatus.SUBMITTED]))
         .setProgressMessageId(message.id);
 
-      const task = instance.findRunningTask(condition.toFunction()).find(t => t) || null;
+      let task = instance.findRunningTask(condition.toFunction()).find(t => t) || null;
+
+      // Fallback 1: Try matching by messageId (TASK_PROPERTY_MESSAGE_ID)
+      if (!task && message.id) {
+        condition = new TaskCondition()
+          .setStatusSet(new Set([TaskStatus.IN_PROGRESS, TaskStatus.SUBMITTED]))
+          .setMessageId(message.id);
+        task = instance.findRunningTask(condition.toFunction()).find(t => t) || null;
+      }
+
+      // Fallback 2: Try matching by interactionMetadataId
+      if (!task && message.interactionMetadata?.id) {
+        // TaskCondition doesn't have a method for interactionMetadataId, so use custom function
+        const tasks = instance.findRunningTask((t) => {
+          if (t.status !== TaskStatus.IN_PROGRESS && t.status !== TaskStatus.SUBMITTED) {
+            return false;
+          }
+          const interactionMetadataId = t.getProperty(TASK_PROPERTY_INTERACTION_METADATA_ID);
+          return interactionMetadataId === message.interactionMetadata.id;
+        });
+        task = tasks.find(t => t) || null;
+      }
+
+      // Fallback 3: Try matching by finalPrompt (parseData.prompt) and status
+      if (!task && parseData.prompt) {
+        condition = new TaskCondition()
+          .setStatusSet(new Set([TaskStatus.IN_PROGRESS, TaskStatus.SUBMITTED]))
+          .setFinalPrompt(parseData.prompt);
+        const tasks = instance.findRunningTask(condition.toFunction());
+        // Sort by startTime and take the earliest matching task
+        task = tasks.sort((a, b) => (a.startTime || 0) - (b.startTime || 0))[0] || null;
+      }
+
       if (!task) {
         return;
       }
