@@ -24,12 +24,49 @@ export class StartAndProgressHandler extends MessageHandler {
     const content = this.getMessageContent(message);
     const parseData = parseContent(content);
 
-    if (messageType === MessageType.CREATE && nonce) {
+    if (messageType === MessageType.CREATE) {
       // Task started
-      const task = instance.getRunningTaskByNonce(nonce);
+      let task = null;
+      
+      // Primary match: Try matching by nonce
+      if (nonce) {
+        task = instance.getRunningTaskByNonce(nonce);
+      }
+      
+      // Fallback 1: Try matching by interactionMetadataId (for modal-submitted tasks without nonce)
+      let matchedByInteractionMetadataId = false;
+      if (!task && message.interactionMetadata?.id) {
+        const tasks = instance.findRunningTask((t) => {
+          if (t.status !== TaskStatus.IN_PROGRESS && t.status !== TaskStatus.SUBMITTED) {
+            return false;
+          }
+          const interactionMetadataId = t.getProperty(TASK_PROPERTY_INTERACTION_METADATA_ID);
+          return interactionMetadataId === message.interactionMetadata.id;
+        });
+        task = tasks.find(t => t) || null;
+        if (task) {
+          matchedByInteractionMetadataId = true;
+        }
+      }
+      
+      // Fallback 2: Try matching by finalPrompt (for modal-submitted tasks)
+      let matchedByFinalPrompt = false;
+      if (!task && parseData?.prompt) {
+        const condition = new TaskCondition()
+          .setStatusSet(new Set([TaskStatus.IN_PROGRESS, TaskStatus.SUBMITTED]))
+          .setFinalPrompt(parseData.prompt);
+        const tasks = instance.findRunningTask(condition.toFunction());
+        // Sort by startTime and take the earliest matching task
+        task = tasks.sort((a, b) => (a.startTime || 0) - (b.startTime || 0))[0] || null;
+        if (task) {
+          matchedByFinalPrompt = true;
+        }
+      }
+      
       if (!task) {
         return;
       }
+      
       message[MJ_MESSAGE_HANDLED] = true;
       task.setProperty(TASK_PROPERTY_PROGRESS_MESSAGE_ID, message.id);
       // Update messageId to the new message ID (especially important for modal-submitted tasks)
