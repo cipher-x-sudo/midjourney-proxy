@@ -249,28 +249,57 @@ export class TaskServiceImpl implements TaskService {
     const messageFlags = task.getProperty(TASK_PROPERTY_FLAGS) || 0;
     const nonce = task.getProperty(TASK_PROPERTY_NONCE) || '';
 
-    // If this is an inpaint action, we need to click the button first and wait for WebSocket events
+    // If this is an inpaint action, check if iframe custom_id is already available
     if (customId && customId.startsWith('MJ::Inpaint::')) {
+      // First, check if the iframe custom_id is already set (from the original button click in /mj/submit/action)
+      const modalTaskId = payload.modalTaskId;
+      let modalTask = discordInstance.getRunningTask(modalTaskId);
+      if (!modalTask) {
+        modalTask = await this.taskStoreService.get(modalTaskId);
+      }
+      
+      if (modalTask) {
+        const existingIframeCustomId = modalTask.getProperty(TASK_PROPERTY_IFRAME_MODAL_CREATE_CUSTOM_ID);
+        if (existingIframeCustomId) {
+          console.log(`[task-service] submitModal - Found existing iframe custom ID for task ${modalTaskId}, skipping button click and proceeding directly`);
+          
+          // Wait additional 1.2 seconds as per C# implementation
+          await this.sleep(1200);
+          
+          // Call submitInpaint with iframe custom ID
+          const maskBase64 = payload.maskBase64 || '';
+          const prompt = payload.prompt || modalTask.promptEn || modalTask.prompt || '';
+          
+          const inpaintResult = await discordInstance.submitInpaint(existingIframeCustomId, maskBase64, prompt);
+          if (inpaintResult.getCode() !== ReturnCode.SUCCESS) {
+            return SubmitResultVO.fail(
+              ReturnCode.FAILURE,
+              `Failed to submit inpaint job: ${inpaintResult.getDescription()}`
+            );
+          }
+
+          return SubmitResultVO.of(ReturnCode.SUCCESS, 'Success', task.id!);
+        }
+      }
+      
+      // If iframe custom_id not found, click button and wait for it (fallback for edge cases)
+      console.log(`[task-service] submitModal - No existing iframe custom ID found, clicking button and waiting for WebSocket events`);
+      
       // Step 1: Click the button programmatically via Discord API (returns 204 No Content)
-      // We need to call customAction directly, not through submitCustomAction which returns EXISTED
       const actionMessage = await discordInstance.customAction(messageId, messageFlags, customId, nonce);
       if (actionMessage.getCode() !== ReturnCode.SUCCESS) {
         return SubmitResultVO.fail(actionMessage.getCode(), actionMessage.getDescription());
       }
 
-      // Step 2: Wait for remixModalMessageId and interactionMetadataId (polling every 2.5s, max 5 minutes)
-      const maxWaitTime = 300000; // 5 minutes in milliseconds
-      const pollInterval = 2500; // 2.5 seconds
+      // Step 2: Wait for iframe custom ID (polling every 1s, max 30 seconds for timeout)
+      const maxWaitTime = 30000; // 30 seconds in milliseconds (reduced from 5 minutes)
+      const pollInterval = 1000; // 1 second (reduced from 2.5 seconds)
       const startTime = Date.now();
 
       while (true) {
-        // Get fresh task state - use modalTaskId to get the MODAL task, not the new task's ID
-        const modalTaskId = payload.modalTaskId;
-        const currentTask = discordInstance.getRunningTask(modalTaskId);
-        let taskToCheck = currentTask;
-        
+        // Get fresh task state
+        let taskToCheck = discordInstance.getRunningTask(modalTaskId);
         if (!taskToCheck) {
-          // Try to get from task store
           taskToCheck = await this.taskStoreService.get(modalTaskId);
           if (!taskToCheck) {
             console.error(`[task-service] submitModal - Task ${modalTaskId} not found in runningTasks or Redis`);
@@ -278,8 +307,7 @@ export class TaskServiceImpl implements TaskService {
           }
         }
         
-        // Check if iframe custom ID is already available (from previous button click in /mj/submit/action)
-        // If so, we can proceed immediately without waiting for remixModalMessageId/interactionMetadataId
+        // Check if iframe custom ID is now available
         const iframeCustomId = taskToCheck.getProperty(TASK_PROPERTY_IFRAME_MODAL_CREATE_CUSTOM_ID);
         if (iframeCustomId) {
           console.log(`[task-service] submitModal - Found iframe custom ID for task ${modalTaskId}, proceeding with inpaint submission`);
@@ -301,33 +329,10 @@ export class TaskServiceImpl implements TaskService {
 
           return SubmitResultVO.of(ReturnCode.SUCCESS, 'Success', task.id!);
         }
-        
-        // Otherwise, wait for remixModalMessageId and interactionMetadataId (legacy flow)
-        const remixModalMessageId = taskToCheck.getProperty(TASK_PROPERTY_REMIX_MODAL_MESSAGE_ID);
-        const interactionMetadataId = taskToCheck.getProperty(TASK_PROPERTY_INTERACTION_METADATA_ID);
-        
-        if (remixModalMessageId && interactionMetadataId && iframeCustomId) {
-          // Wait additional 1.2 seconds as per C# implementation
-          await this.sleep(1200);
-          
-          // Call submitInpaint with iframe custom ID
-          const maskBase64 = payload.maskBase64 || '';
-          const prompt = payload.prompt || taskToCheck.promptEn || taskToCheck.prompt || '';
-          
-          const inpaintResult = await discordInstance.submitInpaint(iframeCustomId, maskBase64, prompt);
-          if (inpaintResult.getCode() !== ReturnCode.SUCCESS) {
-            return SubmitResultVO.fail(
-              ReturnCode.FAILURE,
-              `Failed to submit inpaint job: ${inpaintResult.getDescription()}`
-            );
-          }
-
-          return SubmitResultVO.of(ReturnCode.SUCCESS, 'Success', task.id!);
-        }
 
         // Check timeout
         if (Date.now() - startTime > maxWaitTime) {
-          return SubmitResultVO.fail(ReturnCode.NOT_FOUND, 'Timeout: remixModalMessageId and interactionMetadataId not found');
+          return SubmitResultVO.fail(ReturnCode.NOT_FOUND, 'Timeout: iframe custom ID not found within 30 seconds');
         }
 
         // Wait before next poll
