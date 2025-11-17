@@ -267,69 +267,62 @@ export class TaskServiceImpl implements TaskService {
         // Get fresh task state - use modalTaskId to get the MODAL task, not the new task's ID
         const modalTaskId = payload.modalTaskId;
         const currentTask = discordInstance.getRunningTask(modalTaskId);
-        if (!currentTask) {
+        let taskToCheck = currentTask;
+        
+        if (!taskToCheck) {
           // Try to get from task store
-          const storedTask = await this.taskStoreService.get(modalTaskId);
-          if (!storedTask) {
+          taskToCheck = await this.taskStoreService.get(modalTaskId);
+          if (!taskToCheck) {
             console.error(`[task-service] submitModal - Task ${modalTaskId} not found in runningTasks or Redis`);
             return SubmitResultVO.fail(ReturnCode.NOT_FOUND, 'Task not found');
           }
+        }
+        
+        // Check if iframe custom ID is already available (from previous button click in /mj/submit/action)
+        // If so, we can proceed immediately without waiting for remixModalMessageId/interactionMetadataId
+        const iframeCustomId = taskToCheck.getProperty(TASK_PROPERTY_IFRAME_MODAL_CREATE_CUSTOM_ID);
+        if (iframeCustomId) {
+          console.log(`[task-service] submitModal - Found iframe custom ID for task ${modalTaskId}, proceeding with inpaint submission`);
           
-          const remixModalMessageId = storedTask.getProperty(TASK_PROPERTY_REMIX_MODAL_MESSAGE_ID);
-          const interactionMetadataId = storedTask.getProperty(TASK_PROPERTY_INTERACTION_METADATA_ID);
+          // Wait additional 1.2 seconds as per C# implementation
+          await this.sleep(1200);
           
-          if (remixModalMessageId && interactionMetadataId) {
-            // Wait additional 1.2 seconds as per C# implementation
-            await this.sleep(1200);
-            
-            // Get iframe custom ID
-            const iframeCustomId = storedTask.getProperty(TASK_PROPERTY_IFRAME_MODAL_CREATE_CUSTOM_ID);
-            if (!iframeCustomId) {
-              return SubmitResultVO.fail(ReturnCode.NOT_FOUND, 'Iframe custom ID not found');
-            }
-
-            // Call submitInpaint with iframe custom ID
-            const maskBase64 = payload.maskBase64 || '';
-            const prompt = payload.prompt || storedTask.promptEn || storedTask.prompt || '';
-            
-            const inpaintResult = await discordInstance.submitInpaint(iframeCustomId, maskBase64, prompt);
-            if (inpaintResult.getCode() !== ReturnCode.SUCCESS) {
-              return SubmitResultVO.fail(
-                ReturnCode.FAILURE,
-                `Failed to submit inpaint job: ${inpaintResult.getDescription()}`
-              );
-            }
-
-            return SubmitResultVO.of(ReturnCode.SUCCESS, 'Success', task.id!);
+          // Call submitInpaint with iframe custom ID
+          const maskBase64 = payload.maskBase64 || '';
+          const prompt = payload.prompt || taskToCheck.promptEn || taskToCheck.prompt || '';
+          
+          const inpaintResult = await discordInstance.submitInpaint(iframeCustomId, maskBase64, prompt);
+          if (inpaintResult.getCode() !== ReturnCode.SUCCESS) {
+            return SubmitResultVO.fail(
+              ReturnCode.FAILURE,
+              `Failed to submit inpaint job: ${inpaintResult.getDescription()}`
+            );
           }
-        } else {
-          const remixModalMessageId = currentTask.getProperty(TASK_PROPERTY_REMIX_MODAL_MESSAGE_ID);
-          const interactionMetadataId = currentTask.getProperty(TASK_PROPERTY_INTERACTION_METADATA_ID);
+
+          return SubmitResultVO.of(ReturnCode.SUCCESS, 'Success', task.id!);
+        }
+        
+        // Otherwise, wait for remixModalMessageId and interactionMetadataId (legacy flow)
+        const remixModalMessageId = taskToCheck.getProperty(TASK_PROPERTY_REMIX_MODAL_MESSAGE_ID);
+        const interactionMetadataId = taskToCheck.getProperty(TASK_PROPERTY_INTERACTION_METADATA_ID);
+        
+        if (remixModalMessageId && interactionMetadataId && iframeCustomId) {
+          // Wait additional 1.2 seconds as per C# implementation
+          await this.sleep(1200);
           
-          if (remixModalMessageId && interactionMetadataId) {
-            // Wait additional 1.2 seconds as per C# implementation
-            await this.sleep(1200);
-            
-            // Get iframe custom ID
-            const iframeCustomId = currentTask.getProperty(TASK_PROPERTY_IFRAME_MODAL_CREATE_CUSTOM_ID);
-            if (!iframeCustomId) {
-              return SubmitResultVO.fail(ReturnCode.NOT_FOUND, 'Iframe custom ID not found');
-            }
-
-            // Call submitInpaint with iframe custom ID
-            const maskBase64 = payload.maskBase64 || '';
-            const prompt = payload.prompt || currentTask.promptEn || currentTask.prompt || '';
-            
-            const inpaintResult = await discordInstance.submitInpaint(iframeCustomId, maskBase64, prompt);
-            if (inpaintResult.getCode() !== ReturnCode.SUCCESS) {
-              return SubmitResultVO.fail(
-                ReturnCode.FAILURE,
-                `Failed to submit inpaint job: ${inpaintResult.getDescription()}`
-              );
-            }
-
-            return SubmitResultVO.of(ReturnCode.SUCCESS, 'Success', task.id!);
+          // Call submitInpaint with iframe custom ID
+          const maskBase64 = payload.maskBase64 || '';
+          const prompt = payload.prompt || taskToCheck.promptEn || taskToCheck.prompt || '';
+          
+          const inpaintResult = await discordInstance.submitInpaint(iframeCustomId, maskBase64, prompt);
+          if (inpaintResult.getCode() !== ReturnCode.SUCCESS) {
+            return SubmitResultVO.fail(
+              ReturnCode.FAILURE,
+              `Failed to submit inpaint job: ${inpaintResult.getDescription()}`
+            );
           }
+
+          return SubmitResultVO.of(ReturnCode.SUCCESS, 'Success', task.id!);
         }
 
         // Check timeout
