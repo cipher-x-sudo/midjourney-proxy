@@ -240,5 +240,18 @@ export class IframeCustomIdHandler extends MessageHandler {
       return;
     }
   }
+
+  /**
+   * Save task with iframe custom_id to store
+   */
+  private async saveTaskWithIframeCustomId(instanceId: string, task: any): Promise<void> {
+    try {
+      await this.taskStoreService.save(task);
+      console.log(`[iframe-handler-${instanceId}] Saved task ${task.id} to store with iframe custom_id`);
+    } catch (error: any) {
+      console.error(`[iframe-handler-${instanceId}] Failed to save task ${task.id} with iframe custom_id:`, error);
+      throw error;
+    }
+  }
 }
 
