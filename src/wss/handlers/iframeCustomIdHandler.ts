@@ -216,19 +216,16 @@ export class IframeCustomIdHandler extends MessageHandler {
       });
 
       if (tasks.length > 0) {
-        // Store iframe modal custom ID for all matching tasks
-        tasks.forEach(async (task) => {
+        // Store iframe modal custom ID for all matching tasks and save to store
+        for (const task of tasks) {
           task.setProperty(TASK_PROPERTY_IFRAME_MODAL_CREATE_CUSTOM_ID, customId);
           console.log(`[iframe-handler-${instance.getInstanceId()}] Set iframe_modal_custom_id for task ${task.id}: ${customId.substring(0, 50)}...`);
           
-          // Save task to store so submitModal can find it
-          try {
-            await this.taskStoreService.save(task);
-            console.log(`[iframe-handler-${instance.getInstanceId()}] Saved task ${task.id} to store with iframe custom_id`);
-          } catch (error: any) {
+          // Save task to store so submitModal can find it (fire-and-forget to avoid blocking handler)
+          this.saveTaskWithIframeCustomId(instance.getInstanceId(), task).catch((error: any) => {
             console.error(`[iframe-handler-${instance.getInstanceId()}] Failed to save task ${task.id} with iframe custom_id:`, error);
-          }
-        });
+          });
+        }
       }
       return;
     }
