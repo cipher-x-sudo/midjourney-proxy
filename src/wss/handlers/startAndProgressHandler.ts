@@ -6,7 +6,7 @@ import { parseContent } from '../../utils/convertUtils';
 import { DiscordHelper } from '../../support/discordHelper';
 import { TaskCondition } from '../../support/taskCondition';
 import { TaskStoreService } from '../../services/store/taskStoreService';
-import { TASK_PROPERTY_PROGRESS_MESSAGE_ID, TASK_PROPERTY_FINAL_PROMPT, TASK_PROPERTY_MESSAGE_HASH, MJ_MESSAGE_HANDLED } from '../../constants';
+import { TASK_PROPERTY_PROGRESS_MESSAGE_ID, TASK_PROPERTY_FINAL_PROMPT, TASK_PROPERTY_MESSAGE_HASH, TASK_PROPERTY_DISCORD_INSTANCE_ID, MJ_MESSAGE_HANDLED } from '../../constants';
 
 /**
  * Start and progress handler
@@ -81,10 +81,42 @@ export class StartAndProgressHandler extends MessageHandler {
           
           if (redisTask) {
             task = redisTask;
-            taskSource = 'redis';
-            console.log(`[Tracker] MESSAGE_UPDATE: ✓ Found task in Redis! taskId=${task.id}, progressMessageId=${message.id}`);
+            taskSource = 'redis-progressMessageId';
+            console.log(`[Tracker] MESSAGE_UPDATE: ✓ Found task in Redis by progressMessageId! taskId=${task.id}, progressMessageId=${message.id}`);
           } else {
-            console.log(`[Tracker] MESSAGE_UPDATE: Task not found in Redis either for progressMessageId=${message.id}`);
+            console.log(`[Tracker] MESSAGE_UPDATE: Task not found by progressMessageId in Redis for ${message.id}`);
+            
+            // Level 3 fallback: Match by prompt (Discord sometimes uses different message IDs for progress updates)
+            if (parseData.prompt) {
+              console.log(`[Tracker] MESSAGE_UPDATE: Trying prompt-based fallback for prompt="${parseData.prompt.substring(0, 40)}..."`);
+              
+              const instanceId = instance.getInstanceId();
+              const promptTaskList = await this.taskStoreService.list((t: any) => {
+                const finalPrompt = t.getProperty(TASK_PROPERTY_FINAL_PROMPT);
+                const status = t.status;
+                const taskInstanceId = t.getProperty(TASK_PROPERTY_DISCORD_INSTANCE_ID);
+                const matchesPrompt = finalPrompt === parseData.prompt;
+                const matchesStatus = status === TaskStatus.IN_PROGRESS || status === TaskStatus.SUBMITTED;
+                const matchesInstance = taskInstanceId === instanceId;
+                
+                return matchesPrompt && matchesStatus && matchesInstance;
+              });
+              
+              if (promptTaskList.length > 0) {
+                // Take the most recent task if multiple matches
+                const sortedTasks = promptTaskList.sort((a: any, b: any) => (b.startTime || 0) - (a.startTime || 0));
+                task = sortedTasks[0];
+                taskSource = 'redis-prompt';
+                
+                // CRITICAL: Update progressMessageId to the new message ID
+                const oldProgressMessageId = task.getProperty(TASK_PROPERTY_PROGRESS_MESSAGE_ID);
+                task.setProperty(TASK_PROPERTY_PROGRESS_MESSAGE_ID, message.id);
+                
+                console.log(`[Tracker] MESSAGE_UPDATE: ✓ Found task in Redis by prompt! taskId=${task.id}, oldProgressMessageId=${oldProgressMessageId}, newProgressMessageId=${message.id}`);
+              } else {
+                console.log(`[Tracker] MESSAGE_UPDATE: Task not found by prompt either`);
+              }
+            }
           }
         } catch (error: any) {
           console.error(`[Tracker] MESSAGE_UPDATE: Error checking Redis fallback:`, error);
