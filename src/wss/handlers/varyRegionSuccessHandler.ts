@@ -5,7 +5,9 @@ import { TaskStatus } from '../../enums/TaskStatus';
 import { DiscordInstance } from '../../loadbalancer/discordInstance';
 import { parseContent, parseContentWithRegex } from '../../utils/convertUtils';
 import { DiscordHelper } from '../../support/discordHelper';
-import { TASK_PROPERTY_PROGRESS_MESSAGE_ID, MJ_MESSAGE_HANDLED } from '../../constants';
+import { TASK_PROPERTY_PROGRESS_MESSAGE_ID, MJ_MESSAGE_HANDLED, TASK_PROPERTY_BUTTONS, TASK_PROPERTY_MESSAGE_ID } from '../../constants';
+import { extractButtonsFromMessage } from '../../utils/buttonUtils';
+import { TaskCondition } from '../../support/taskCondition';
 
 /**
  * Vary Region (Inpaint) success handler
@@ -104,6 +106,39 @@ export class VaryRegionSuccessHandler extends MessageHandler {
       
       // Use the standard findAndFinishImageTask method
       this.findAndFinishImageTask(instance, TaskAction.VARIATION, parseData.prompt, message);
+    }
+  }
+
+  /**
+   * Override findAndFinishImageTask to also extract buttons for vary region actions
+   */
+  protected findAndFinishImageTask(
+    instance: DiscordInstance,
+    action: TaskAction,
+    finalPrompt: string,
+    message: any
+  ): void {
+    // Extract buttons before calling parent (message might be modified)
+    const buttons = extractButtonsFromMessage(message);
+    
+    // Call parent implementation
+    super.findAndFinishImageTask(instance, action, finalPrompt, message);
+    
+    // Find the task that was just finished and add buttons to it
+    // The parent method sets TASK_PROPERTY_MESSAGE_ID in finishTask
+    const messageId = message.id;
+    if (messageId && buttons.length > 0) {
+      const condition = new TaskCondition()
+        .setActionSet(new Set([action]))
+        .setStatusSet(new Set([TaskStatus.SUCCESS]));
+      
+      // Try to find by message ID first (most reliable)
+      const tasks = instance.findRunningTask(condition.toFunction());
+      const task = tasks.find(t => t.getProperty(TASK_PROPERTY_MESSAGE_ID) === messageId) || null;
+      
+      if (task) {
+        task.setProperty(TASK_PROPERTY_BUTTONS, buttons);
+      }
     }
   }
 }
