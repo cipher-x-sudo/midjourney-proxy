@@ -5,16 +5,17 @@ import { DiscordInstance } from '../../loadbalancer/discordInstance';
 import { parseContent } from '../../utils/convertUtils';
 import { DiscordHelper } from '../../support/discordHelper';
 import { TaskCondition } from '../../support/taskCondition';
-import { TASK_PROPERTY_PROGRESS_MESSAGE_ID, TASK_PROPERTY_FINAL_PROMPT, TASK_PROPERTY_DISCORD_INSTANCE_ID, MJ_MESSAGE_HANDLED } from '../../constants';
+import { TASK_PROPERTY_PROGRESS_MESSAGE_ID, TASK_PROPERTY_FINAL_PROMPT, TASK_PROPERTY_DISCORD_INSTANCE_ID, TASK_PROPERTY_NONCE, MJ_MESSAGE_HANDLED } from '../../constants';
 
 /**
  * Progress Message ID Update Handler
  * 
- * Fixes Discord's behavior of using DIFFERENT message IDs for MESSAGE_CREATE vs MESSAGE_UPDATE.
+ * Pre-processes MESSAGE_UPDATE events to fix progressMessageId matching.
+ * Discord uses different message IDs for MESSAGE_CREATE vs MESSAGE_UPDATE,
+ * so this handler updates progressMessageId when first MESSAGE_UPDATE arrives.
  * 
- * When MESSAGE_UPDATE arrives with a different message.id than the progressMessageId stored
- * from MESSAGE_CREATE, this handler finds the task by other means and updates progressMessageId
- * so StartAndProgressHandler can match it correctly.
+ * Runs BEFORE StartAndProgressHandler (order 85 vs 90) to ensure
+ * progressMessageId is updated before StartAndProgressHandler tries to match.
  */
 export class ProgressMessageIdUpdateHandler extends MessageHandler {
   constructor(discordHelper: DiscordHelper) {
@@ -22,8 +23,7 @@ export class ProgressMessageIdUpdateHandler extends MessageHandler {
   }
 
   order(): number {
-    // Run BEFORE StartAndProgressHandler (order 90)
-    return 85;
+    return 85; // Run BEFORE StartAndProgressHandler (order 90)
   }
 
   handle(instance: DiscordInstance, messageType: MessageType, message: any): void {
@@ -32,78 +32,106 @@ export class ProgressMessageIdUpdateHandler extends MessageHandler {
       return;
     }
 
-    // Skip if message already handled
-    if (message[MJ_MESSAGE_HANDLED]) {
-      return;
-    }
-
     const content = this.getMessageContent(message);
     const parseData = parseContent(content);
     
-    if (!parseData || !message.id) {
+    // Skip if content can't be parsed
+    if (!parseData) {
       return;
     }
 
-    // Try to find task by current progressMessageId (existing logic)
+    // Skip if status is 'Stopped'
+    if (parseData.status === 'Stopped') {
+      return;
+    }
+
+    // Skip if message is already handled
+    if (message[MJ_MESSAGE_HANDLED] === true) {
+      return;
+    }
+
+    // First, try to find task by progressMessageId (existing logic)
     const condition = new TaskCondition()
       .setStatusSet(new Set([TaskStatus.IN_PROGRESS, TaskStatus.SUBMITTED]))
       .setProgressMessageId(message.id);
 
     let task = instance.findRunningTask(condition.toFunction()).find(t => t) || null;
 
-    // If task found by progressMessageId, nothing to do - StartAndProgressHandler will handle it
+    // If task found by progressMessageId, no need to update (already correct)
     if (task) {
       return;
     }
 
-    // Task NOT found by progressMessageId - Discord must be using different message IDs!
-    // Find task by other means and update progressMessageId
+    // Task not found by progressMessageId - try to find by other means
+    console.log(`[progress-id-update-handler-${instance.getInstanceId()}] MESSAGE_UPDATE: Task not found by progressMessageId=${message.id}, trying alternative matching...`);
 
-    console.log(`[progress-id-fix-${instance.getInstanceId()}] MESSAGE_UPDATE: No task found by progressMessageId=${message.id}, searching by other means...`);
+    // Strategy 1: Try matching by nonce (if available)
+    const nonce = this.getMessageNonce(message);
+    if (nonce) {
+      const nonceTask = instance.getRunningTaskByNonce(nonce);
+      if (nonceTask && (nonceTask.status === TaskStatus.IN_PROGRESS || nonceTask.status === TaskStatus.SUBMITTED)) {
+        task = nonceTask;
+        const oldProgressMessageId = task.getProperty(TASK_PROPERTY_PROGRESS_MESSAGE_ID);
+        task.setProperty(TASK_PROPERTY_PROGRESS_MESSAGE_ID, message.id);
+        console.log(`[progress-id-update-handler-${instance.getInstanceId()}] ✓ Found task ${task.id} by nonce, updated progressMessageId: ${oldProgressMessageId || 'none'} -> ${message.id}`);
+        return; // Don't mark as handled - let StartAndProgressHandler process it
+      }
+    }
 
-    const instanceId = instance.getInstanceId();
-    let matchingTask: any = null;
-
-    // Strategy 1: Match by prompt/finalPrompt and status
+    // Strategy 2: Try matching by prompt/finalPrompt
     if (parseData.prompt) {
-      const promptCondition = new TaskCondition()
-        .setStatusSet(new Set([TaskStatus.IN_PROGRESS, TaskStatus.SUBMITTED]))
-        .setFinalPrompt(parseData.prompt);
-
-      const promptTasks = instance.findRunningTask(promptCondition.toFunction())
-        .filter(t => {
-          const taskInstanceId = t.getProperty(TASK_PROPERTY_DISCORD_INSTANCE_ID);
-          return taskInstanceId === instanceId;
-        });
+      const instanceId = instance.getInstanceId();
+      
+      const promptTasks = instance.findRunningTask((t) => {
+        const finalPrompt = t.getProperty(TASK_PROPERTY_FINAL_PROMPT);
+        const status = t.status;
+        const taskInstanceId = t.getProperty(TASK_PROPERTY_DISCORD_INSTANCE_ID);
+        const matchesPrompt = finalPrompt === parseData.prompt;
+        const matchesStatus = status === TaskStatus.IN_PROGRESS || status === TaskStatus.SUBMITTED;
+        const matchesInstance = taskInstanceId === instanceId;
+        
+        return matchesPrompt && matchesStatus && matchesInstance;
+      });
 
       if (promptTasks.length > 0) {
-        // Take most recent task (by startTime)
-        matchingTask = promptTasks.sort((a, b) => (b.startTime || 0) - (a.startTime || 0))[0];
-        console.log(`[progress-id-fix-${instance.getInstanceId()}] Found task ${matchingTask.id} by prompt: "${parseData.prompt.substring(0, 40)}..."`);
+        // Take the most recent task if multiple matches
+        const sortedTasks = promptTasks.sort((a, b) => (b.startTime || 0) - (a.startTime || 0));
+        task = sortedTasks[0];
+        
+        const oldProgressMessageId = task.getProperty(TASK_PROPERTY_PROGRESS_MESSAGE_ID);
+        task.setProperty(TASK_PROPERTY_PROGRESS_MESSAGE_ID, message.id);
+        console.log(`[progress-id-update-handler-${instance.getInstanceId()}] ✓ Found task ${task.id} by prompt, updated progressMessageId: ${oldProgressMessageId || 'none'} -> ${message.id}`);
+        return; // Don't mark as handled - let StartAndProgressHandler process it
       }
     }
 
-    // Strategy 2: Match by nonce if available
-    if (!matchingTask) {
-      const nonce = this.getMessageNonce(message);
-      if (nonce) {
-        matchingTask = instance.getRunningTaskByNonce(nonce);
-        if (matchingTask) {
-          console.log(`[progress-id-fix-${instance.getInstanceId()}] Found task ${matchingTask.id} by nonce: ${nonce}`);
-        }
-      }
-    }
-
-    // If task found, update progressMessageId to current message.id
-    if (matchingTask) {
-      const oldProgressMessageId = matchingTask.getProperty(TASK_PROPERTY_PROGRESS_MESSAGE_ID);
-      matchingTask.setProperty(TASK_PROPERTY_PROGRESS_MESSAGE_ID, message.id);
-      console.log(`[progress-id-fix-${instance.getInstanceId()}] ✓ Updated task ${matchingTask.id} progressMessageId: ${oldProgressMessageId || 'none'} → ${message.id}`);
+    // Strategy 3: Try matching by status and instance (last resort - most recent task)
+    const instanceId = instance.getInstanceId();
+    
+    const statusTasks = instance.findRunningTask((t) => {
+      const status = t.status;
+      const taskInstanceId = t.getProperty(TASK_PROPERTY_DISCORD_INSTANCE_ID);
+      const matchesStatus = status === TaskStatus.IN_PROGRESS || status === TaskStatus.SUBMITTED;
+      const matchesInstance = taskInstanceId === instanceId;
+      const hasProgressMessageId = t.getProperty(TASK_PROPERTY_PROGRESS_MESSAGE_ID); // Prefer tasks that already have one
       
-      // Don't mark message as handled - let StartAndProgressHandler process it
-    } else {
-      console.log(`[progress-id-fix-${instance.getInstanceId()}] No matching task found for MESSAGE_UPDATE message.id=${message.id}`);
+      // Prefer tasks without progressMessageId (they need updating)
+      return matchesStatus && matchesInstance && !hasProgressMessageId;
+    });
+
+    if (statusTasks.length > 0) {
+      // Take the most recent task
+      const sortedTasks = statusTasks.sort((a, b) => (b.startTime || 0) - (a.startTime || 0));
+      task = sortedTasks[0];
+      
+      const oldProgressMessageId = task.getProperty(TASK_PROPERTY_PROGRESS_MESSAGE_ID);
+      task.setProperty(TASK_PROPERTY_PROGRESS_MESSAGE_ID, message.id);
+      console.log(`[progress-id-update-handler-${instance.getInstanceId()}] ✓ Found task ${task.id} by status (last resort), updated progressMessageId: ${oldProgressMessageId || 'none'} -> ${message.id}`);
+      return; // Don't mark as handled - let StartAndProgressHandler process it
     }
+
+    // No matching task found
+    console.log(`[progress-id-update-handler-${instance.getInstanceId()}] MESSAGE_UPDATE: No matching task found for message.id=${message.id}, prompt="${parseData.prompt?.substring(0, 40)}..."`);
   }
 }
 
