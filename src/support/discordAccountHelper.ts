@@ -137,7 +137,7 @@ export class DiscordAccountHelper {
       new ShortenSuccessHandler(this.discordHelper),
       new BlendSuccessHandler(this.discordHelper),
       new VaryRegionSuccessHandler(this.discordHelper), // Handle inpaint/vary region tasks
-      new StartAndProgressHandler(this.discordHelper, this.taskStoreService), // Pass taskStoreService for Redis fallback
+      new StartAndProgressHandler(this.discordHelper),
       new ImagineSuccessHandler(this.discordHelper),
       new UpscaleSuccessHandler(this.discordHelper),
       new VariationSuccessHandler(this.discordHelper),
