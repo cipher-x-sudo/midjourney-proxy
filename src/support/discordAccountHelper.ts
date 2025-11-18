@@ -17,6 +17,7 @@ import { ShortenSuccessHandler } from '../wss/handlers/shortenSuccessHandler';
 import { SeedDmHandler } from '../wss/handlers/seedDmHandler';
 import { BlendSuccessHandler } from '../wss/handlers/blendSuccessHandler';
 import { StartAndProgressHandler } from '../wss/handlers/startAndProgressHandler';
+import { ProgressMessageIdUpdateHandler } from '../wss/handlers/progressMessageIdUpdateHandler';
 import { ErrorMessageHandler } from '../wss/handlers/errorMessageHandler';
 import { CaptchaEmbeddedHandler } from '../wss/handlers/captchaEmbeddedHandler';
 import { IframeCustomIdHandler } from '../wss/handlers/iframeCustomIdHandler';
@@ -137,6 +138,7 @@ export class DiscordAccountHelper {
       new ShortenSuccessHandler(this.discordHelper),
       new BlendSuccessHandler(this.discordHelper),
       new VaryRegionSuccessHandler(this.discordHelper), // Handle inpaint/vary region tasks
+      new ProgressMessageIdUpdateHandler(this.discordHelper), // Fix progressMessageId matching for Discord's different message IDs
       new StartAndProgressHandler(this.discordHelper),
       new ImagineSuccessHandler(this.discordHelper),
       new UpscaleSuccessHandler(this.discordHelper),
