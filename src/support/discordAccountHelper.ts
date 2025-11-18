@@ -137,7 +137,7 @@ export class DiscordAccountHelper {
       new DescribeSuccessHandler(this.discordHelper),
       new ShortenSuccessHandler(this.discordHelper),
       new BlendSuccessHandler(this.discordHelper),
-      new VaryRegionSuccessHandler(this.discordHelper), // Handle inpaint/vary region tasks
+      new VaryRegionSuccessHandler(this.discordHelper, this.taskStoreService), // Handle inpaint/vary region tasks
       new ProgressMessageIdUpdateHandler(this.discordHelper), // Fix progressMessageId matching for Discord's different message IDs
       new StartAndProgressHandler(this.discordHelper),
       new ImagineSuccessHandler(this.discordHelper),

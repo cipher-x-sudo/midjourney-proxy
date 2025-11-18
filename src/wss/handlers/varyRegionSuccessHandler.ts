@@ -8,6 +8,7 @@ import { DiscordHelper } from '../../support/discordHelper';
 import { TASK_PROPERTY_PROGRESS_MESSAGE_ID, MJ_MESSAGE_HANDLED, TASK_PROPERTY_BUTTONS, TASK_PROPERTY_MESSAGE_ID } from '../../constants';
 import { extractButtonsFromMessage } from '../../utils/buttonUtils';
 import { TaskCondition } from '../../support/taskCondition';
+import { TaskStoreService } from '../../services/store/taskStoreService';
 
 /**
  * Vary Region (Inpaint) success handler
@@ -19,9 +20,11 @@ import { TaskCondition } from '../../support/taskCondition';
 export class VaryRegionSuccessHandler extends MessageHandler {
   // Matches: **prompt** - Variations (Region) by <@user> (mode)
   private static readonly CONTENT_REGEX = '\\*\\*(.*)\\*\\* - Variations \\(Region\\) by <@\\d+> \\((.*?)\\)';
+  private taskStoreService: TaskStoreService;
 
-  constructor(discordHelper: DiscordHelper) {
+  constructor(discordHelper: DiscordHelper, taskStoreService: TaskStoreService) {
     super(discordHelper);
+    this.taskStoreService = taskStoreService;
   }
 
   order(): number {
@@ -138,6 +141,11 @@ export class VaryRegionSuccessHandler extends MessageHandler {
       
       if (task) {
         task.setProperty(TASK_PROPERTY_BUTTONS, buttons);
+        
+        // Save the task to store after adding buttons to ensure they persist
+        Promise.resolve(this.taskStoreService.save(task)).catch((error: any) => {
+          console.error(`[vary-region-handler-${instance.getInstanceId()}] Failed to save task ${task.id} with buttons:`, error);
+        });
       }
     }
   }
