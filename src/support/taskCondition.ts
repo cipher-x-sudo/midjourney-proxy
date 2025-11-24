@@ -8,6 +8,7 @@ import {
   TASK_PROPERTY_PROGRESS_MESSAGE_ID,
   TASK_PROPERTY_NONCE,
   TASK_PROPERTY_DISCORD_INSTANCE_ID,
+  TASK_PROPERTY_INTERACTION_METADATA_ID,
 } from '../constants';
 
 /**
@@ -24,6 +25,7 @@ export class TaskCondition {
   private progressMessageId?: string;
   private nonce?: string;
   private instanceId?: string;
+  private interactionMetadataId?: string;
 
   setId(id: string): this {
     this.id = id;
@@ -75,6 +77,11 @@ export class TaskCondition {
     return this;
   }
 
+  setInteractionMetadataId(interactionMetadataId: string | undefined): this {
+    this.interactionMetadataId = interactionMetadataId;
+    return this;
+  }
+
   /**
    * Test if task matches condition
    */
@@ -110,6 +117,9 @@ export class TaskCondition {
       return false;
     }
     if (this.instanceId && this.instanceId !== task.getProperty(TASK_PROPERTY_DISCORD_INSTANCE_ID)) {
+      return false;
+    }
+    if (this.interactionMetadataId && this.interactionMetadataId !== task.getProperty(TASK_PROPERTY_INTERACTION_METADATA_ID)) {
       return false;
     }
     return true;
