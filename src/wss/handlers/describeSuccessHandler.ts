@@ -23,12 +23,13 @@ export class DescribeSuccessHandler extends MessageHandler {
     const messageId = message.id;
     
     if (messageType === MessageType.CREATE) {
-      // Check if this is a completion message (bot author, embeds with image)
+      // Check if this is a completion message (bot author, embeds with image and description)
       const isBot = message.author?.bot === true;
       const authorUsername = message.author?.username || '';
-      const hasEmbedsWithImage = message.embeds && 
-        message.embeds.length > 0 && 
-        message.embeds[0]?.image?.url;
+      const embeds = message.embeds;
+      const hasEmbeds = embeds && embeds.length > 0;
+      const hasEmbedsWithImage = hasEmbeds && embeds[0]?.image?.url;
+      const hasEmbedsWithDescription = hasEmbeds && embeds[0]?.description;
       const isJourneyBot = authorUsername.toLowerCase().includes('journey');
       
       // Skip "Waiting to start" messages
@@ -37,8 +38,9 @@ export class DescribeSuccessHandler extends MessageHandler {
         return;
       }
       
-      // Check if it's a completion message
-      if (isBot && isJourneyBot && hasEmbedsWithImage) {
+      // Check if it's a completion message (has embeds with description - the describe result)
+      if (isBot && isJourneyBot && hasEmbedsWithDescription) {
+        console.log(`[describe-handler-${instance.getInstanceId()}] Detected completion message in CREATE event: messageId=${messageId}, hasImage=${!!hasEmbedsWithImage}, hasDescription=${!!hasEmbedsWithDescription}`);
         // This is a completion message - try to finish the task
         this.finishDescribeTaskFromCreate(instance, message, messageId);
         return;
@@ -55,8 +57,17 @@ export class DescribeSuccessHandler extends MessageHandler {
           return;
         }
         task.setProperty(TASK_PROPERTY_PROGRESS_MESSAGE_ID, messageId);
+        console.log(`[describe-handler-${instance.getInstanceId()}] Task started: taskId=${task.id}, progressMessageId=${messageId}`);
       }
     } else if (messageType === MessageType.UPDATE) {
+      // Check if this UPDATE is a completion (has embeds with description)
+      const embeds = message.embeds;
+      const hasEmbedsWithDescription = embeds && embeds.length > 0 && embeds[0]?.description;
+      
+      if (hasEmbedsWithDescription) {
+        console.log(`[describe-handler-${instance.getInstanceId()}] Detected completion message in UPDATE event: messageId=${messageId}`);
+      }
+      
       this.finishDescribeTask(instance, message, messageId);
     }
   }
@@ -67,29 +78,27 @@ export class DescribeSuccessHandler extends MessageHandler {
    */
   private finishDescribeTaskFromCreate(instance: DiscordInstance, message: any, messageId: string): void {
     const embeds = message.embeds;
-    if (!embeds || embeds.length === 0 || !embeds[0]?.image?.url) {
+    if (!embeds || embeds.length === 0 || !embeds[0]?.description) {
+      console.log(`[describe-handler-${instance.getInstanceId()}] finishDescribeTaskFromCreate: Missing embeds or description, messageId=${messageId}`);
       return;
     }
 
-    // Try matching by messageId first
+    // Try matching by interactionMetadata.id first (most reliable for describe)
     let condition = new TaskCondition()
       .setActionSet(new Set([TaskAction.DESCRIBE]))
-      .setStatusSet(new Set([TaskStatus.IN_PROGRESS, TaskStatus.SUBMITTED]))
-      .setMessageId(messageId);
+      .setStatusSet(new Set([TaskStatus.IN_PROGRESS, TaskStatus.SUBMITTED]));
     
-    let task = instance.findRunningTask(condition.toFunction()).find(t => t) || null;
-
-    // If not found, try matching by interactionMetadata.id
-    if (!task && message.interaction_metadata?.id) {
-      condition = new TaskCondition()
-        .setActionSet(new Set([TaskAction.DESCRIBE]))
-        .setStatusSet(new Set([TaskStatus.IN_PROGRESS, TaskStatus.SUBMITTED]))
-        .setInteractionMetadataId(message.interaction_metadata.id);
-      
+    let task: any = null;
+    
+    if (message.interaction_metadata?.id) {
+      condition.setInteractionMetadataId(message.interaction_metadata.id);
       task = instance.findRunningTask(condition.toFunction()).find(t => t) || null;
+      if (task) {
+        console.log(`[describe-handler-${instance.getInstanceId()}] Matched task by interactionMetadata.id: taskId=${task.id}, interactionMetadataId=${message.interaction_metadata.id}`);
+      }
     }
 
-    // If still not found, try matching by progressMessageId
+    // If not found, try matching by progressMessageId (the message that was set when task started)
     if (!task && messageId) {
       condition = new TaskCondition()
         .setActionSet(new Set([TaskAction.DESCRIBE]))
@@ -97,51 +106,41 @@ export class DescribeSuccessHandler extends MessageHandler {
         .setProgressMessageId(messageId);
       
       task = instance.findRunningTask(condition.toFunction()).find(t => t) || null;
+      if (task) {
+        console.log(`[describe-handler-${instance.getInstanceId()}] Matched task by progressMessageId: taskId=${task.id}, progressMessageId=${messageId}`);
+      }
+    }
+
+    // If still not found, try matching by messageId (in case it was already set)
+    if (!task) {
+      condition = new TaskCondition()
+        .setActionSet(new Set([TaskAction.DESCRIBE]))
+        .setStatusSet(new Set([TaskStatus.IN_PROGRESS, TaskStatus.SUBMITTED]))
+        .setMessageId(messageId);
+      
+      task = instance.findRunningTask(condition.toFunction()).find(t => t) || null;
+      if (task) {
+        console.log(`[describe-handler-${instance.getInstanceId()}] Matched task by messageId: taskId=${task.id}, messageId=${messageId}`);
+      }
     }
 
     if (!task) {
+      console.log(`[describe-handler-${instance.getInstanceId()}] Could not find matching DESCRIBE task for completion message: messageId=${messageId}, interactionMetadataId=${message.interaction_metadata?.id || 'none'}`);
+      // Log all running describe tasks for debugging
+      const allDescribeTasks = instance.findRunningTask((t: any) => t.action === TaskAction.DESCRIBE);
+      console.log(`[describe-handler-${instance.getInstanceId()}] Running DESCRIBE tasks: ${allDescribeTasks.map((t: any) => ({
+        id: t.id,
+        status: t.status,
+        progressMessageId: t.getProperty(TASK_PROPERTY_PROGRESS_MESSAGE_ID),
+        interactionMetadataId: t.getProperty(TASK_PROPERTY_INTERACTION_METADATA_ID),
+        messageId: t.getProperty(TASK_PROPERTY_MESSAGE_ID)
+      })).join(', ')}`);
       return;
     }
 
     // Skip if task is already completed
     if (task.status === TaskStatus.SUCCESS || task.status === TaskStatus.FAILURE) {
-      return;
-    }
-
-    message[MJ_MESSAGE_HANDLED] = true;
-    const description = embeds[0].description;
-    task.prompt = description;
-    task.promptEn = description;
-    task.setProperty(TASK_PROPERTY_FINAL_PROMPT, description);
-    
-    const imageUrl = embeds[0].image.url;
-    task.imageUrl = this.replaceCdnUrl(imageUrl);
-    
-    this.finishTask(instance, task, message);
-  }
-
-  /**
-   * Finish describe task from UPDATE event (progress update)
-   * Matches by progressMessageId
-   */
-  private finishDescribeTask(instance: DiscordInstance, message: any, progressMessageId: string): void {
-    const embeds = message.embeds;
-    if (!progressMessageId || !embeds || embeds.length === 0) {
-      return;
-    }
-
-    const condition = new TaskCondition()
-      .setActionSet(new Set([TaskAction.DESCRIBE]))
-      .setStatusSet(new Set([TaskStatus.IN_PROGRESS, TaskStatus.SUBMITTED]))
-      .setProgressMessageId(progressMessageId);
-
-    const task = instance.findRunningTask(condition.toFunction()).find(t => t) || null;
-    if (!task) {
-      return;
-    }
-
-    // Skip if task is already completed
-    if (task.status === TaskStatus.SUCCESS || task.status === TaskStatus.FAILURE) {
+      console.log(`[describe-handler-${instance.getInstanceId()}] Task ${task.id} already completed with status ${task.status}, skipping`);
       return;
     }
 
@@ -156,6 +155,56 @@ export class DescribeSuccessHandler extends MessageHandler {
       task.imageUrl = this.replaceCdnUrl(imageUrl);
     }
     
+    console.log(`[describe-handler-${instance.getInstanceId()}] Finishing describe task: taskId=${task.id}, description length=${description?.length || 0}`);
+    this.finishTask(instance, task, message);
+  }
+
+  /**
+   * Finish describe task from UPDATE event (progress update or completion)
+   * Matches by progressMessageId
+   */
+  private finishDescribeTask(instance: DiscordInstance, message: any, progressMessageId: string): void {
+    const embeds = message.embeds;
+    if (!progressMessageId || !embeds || embeds.length === 0) {
+      return;
+    }
+
+    // Check if this is a completion (has description in embeds)
+    const hasDescription = embeds[0]?.description;
+    if (!hasDescription) {
+      // This is just a progress update, not completion
+      return;
+    }
+
+    const condition = new TaskCondition()
+      .setActionSet(new Set([TaskAction.DESCRIBE]))
+      .setStatusSet(new Set([TaskStatus.IN_PROGRESS, TaskStatus.SUBMITTED]))
+      .setProgressMessageId(progressMessageId);
+
+    const task = instance.findRunningTask(condition.toFunction()).find(t => t) || null;
+    if (!task) {
+      console.log(`[describe-handler-${instance.getInstanceId()}] Could not find DESCRIBE task for UPDATE: progressMessageId=${progressMessageId}`);
+      return;
+    }
+
+    // Skip if task is already completed
+    if (task.status === TaskStatus.SUCCESS || task.status === TaskStatus.FAILURE) {
+      console.log(`[describe-handler-${instance.getInstanceId()}] Task ${task.id} already completed with status ${task.status}, skipping`);
+      return;
+    }
+
+    message[MJ_MESSAGE_HANDLED] = true;
+    const description = embeds[0].description;
+    task.prompt = description;
+    task.promptEn = description;
+    task.setProperty(TASK_PROPERTY_FINAL_PROMPT, description);
+    
+    if (embeds[0].image?.url) {
+      const imageUrl = embeds[0].image.url;
+      task.imageUrl = this.replaceCdnUrl(imageUrl);
+    }
+    
+    console.log(`[describe-handler-${instance.getInstanceId()}] Finishing describe task from UPDATE: taskId=${task.id}, description length=${description?.length || 0}`);
     this.finishTask(instance, task, message);
   }
 }
