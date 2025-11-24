@@ -5,7 +5,8 @@ import { TaskStatus } from '../../enums/TaskStatus';
 import { DiscordInstance } from '../../loadbalancer/discordInstance';
 import { DiscordHelper } from '../../support/discordHelper';
 import { TaskCondition } from '../../support/taskCondition';
-import { TASK_PROPERTY_PROGRESS_MESSAGE_ID, TASK_PROPERTY_FINAL_PROMPT, MJ_MESSAGE_HANDLED } from '../../constants';
+import { TASK_PROPERTY_PROGRESS_MESSAGE_ID, TASK_PROPERTY_FINAL_PROMPT, TASK_PROPERTY_MESSAGE_ID, TASK_PROPERTY_BUTTONS, MJ_MESSAGE_HANDLED } from '../../constants';
+import { extractButtonsFromMessage } from '../../utils/buttonUtils';
 
 /**
  * Describe success handler
@@ -100,6 +101,9 @@ export class DescribeSuccessHandler extends MessageHandler {
       return;
     }
 
+    // Extract buttons before calling finishTask (message might be modified)
+    const buttons = extractButtonsFromMessage(message);
+
     message[MJ_MESSAGE_HANDLED] = true;
     const description = embeds[0].description;
     task.prompt = description;
@@ -112,6 +116,25 @@ export class DescribeSuccessHandler extends MessageHandler {
     }
     
     this.finishTask(instance, task, message);
+
+    // Find the task that was just finished and add buttons to it
+    // The finishTask method sets TASK_PROPERTY_MESSAGE_ID
+    const messageId = message.id;
+    if (messageId && buttons.length > 0) {
+      const condition = new TaskCondition()
+        .setActionSet(new Set([TaskAction.DESCRIBE]))
+        .setStatusSet(new Set([TaskStatus.SUCCESS]));
+      
+      // Try to find by message ID first (most reliable)
+      const tasks = instance.findRunningTask(condition.toFunction());
+      const finishedTask = tasks.find(t => t.getProperty(TASK_PROPERTY_MESSAGE_ID) === messageId) || null;
+      
+      if (finishedTask) {
+        finishedTask.setProperty(TASK_PROPERTY_BUTTONS, buttons);
+        const instanceId = instance.getInstanceId();
+        console.log(`[describe-handler-${instanceId}] Added ${buttons.length} button(s) to task ${finishedTask.id}`);
+      }
+    }
   }
 }
 
